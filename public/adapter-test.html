@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentFootPrints — Adapter Test</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #242838;
+    --border: #2e3347; --text: #e4e6f0; --text2: #8b8fa7;
+    --accent: #6c8cff; --green: #4ade80; --orange: #fb923c;
+    --red: #f87171; --cyan: #22d3ee; --yellow: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 16px; }
+  .header-left { flex: 1; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header h1 span { color: var(--accent); }
+  .header .sub { color: var(--text2); font-size: 13px; margin-top: 4px; }
+  .header .nav-link { font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; transition: all 0.2s; white-space: nowrap; margin-top: 4px; display: inline-block; }
+  .header .nav-link:hover { background: var(--accent); color: white; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 32px; }
+
+  .layer-banner { display: flex; gap: 8px; align-items: center; margin-bottom: 24px; font-size: 12px; flex-wrap: wrap; }
+  .layer { padding: 6px 14px; border-radius: 6px; font-weight: 600; }
+  .layer-0 { background: rgba(108,140,255,0.15); color: var(--accent); border: 1px solid rgba(108,140,255,0.3); }
+  .layer-1 { background: rgba(34,211,238,0.15); color: var(--cyan); border: 1px solid rgba(34,211,238,0.3); }
+  .layer-2 { background: rgba(74,222,128,0.15); color: var(--green); border: 1px solid rgba(74,222,128,0.3); }
+  .layer-arrow { color: var(--text2); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .card-head h3 { font-size: 14px; font-weight: 600; flex: 1; }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-mock { background: rgba(251,191,36,0.15); color: var(--yellow); }
+  .badge-real { background: rgba(74,222,128,0.15); color: var(--green); }
+  .badge-unavail { background: rgba(248,113,113,0.15); color: var(--red); }
+  .card-body { padding: 16px 18px; }
+  .card-desc { font-size: 12px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+
+  .input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .input-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--text); font-size: 13px; outline: none; }
+  .input-row input:focus { border-color: var(--accent); }
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #5a7aef; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .result { margin-top: 12px; display: none; }
+  .result.show { display: block; }
+  .result-header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .result-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+  .result-ok { background: rgba(74,222,128,0.15); color: var(--green); }
+  .result-err { background: rgba(248,113,113,0.15); color: var(--red); }
+  .result-time { font-size: 11px; color: var(--text2); }
+
+  .result-response { background: var(--surface2); border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: var(--green); border: 1px solid rgba(74,222,128,0.15); margin-bottom: 10px; }
+  .result-error { background: var(--surface2); border-radius: 8px; padding: 12px; font-size: 13px; color: var(--red); border: 1px solid rgba(248,113,113,0.15); }
+
+  .narrative-toggle { font-size: 11px; color: var(--accent); cursor: pointer; margin-top: 8px; }
+  .narrative-box { background: var(--surface2); border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 11px; color: var(--text2); line-height: 1.8; display: none; max-height: 200px; overflow-y: auto; }
+  .narrative-box.show { display: block; }
+  .narrative-line { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .narrative-line:last-child { border-bottom: none; }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Agent<span>FootPrints</span> Adapter Test</h1>
+    <div class="sub">Test all adapters end-to-end: Mock, MockAnthropic, MockOpenAI, Real Anthropic, Real OpenAI</div>
+  </div>
+  <a href="/" class="nav-link">&larr; Demo Home</a>
+</div>
+
+<div class="container">
+  <div class="layer-banner">
+    <span class="layer layer-0">FootPrint (Layer 0)</span>
+    <span class="layer-arrow">&rarr;</span>
+    <span class="layer layer-1">AgentFootPrints (Layer 1)</span>
+    <span class="layer-arrow">&rarr;</span>
+    <span class="layer layer-2">agent-footprint-adapters (Layer 2)</span>
+  </div>
+
+  <div class="grid" id="cards"></div>
+</div>
+
+<script>
+const ADAPTERS = [
+  {
+    id: 'mock', name: 'MockAdapter', type: 'mock',
+    desc: 'Scripted responses via the 3-stage subflow. Zero dependencies. Proves the adapter pipeline works.',
+    endpoint: '/api/test/mock', defaultMsg: 'Hello adapter!',
+  },
+  {
+    id: 'mock-anthropic', name: 'MockAnthropicAdapter', type: 'mock',
+    desc: 'Simulates Anthropic Messages API format: content blocks, tool_use blocks, separate system param.',
+    endpoint: '/api/test/mock-anthropic', defaultMsg: 'Hello Claude!',
+  },
+  {
+    id: 'mock-openai', name: 'MockOpenAIAdapter', type: 'mock',
+    desc: 'Simulates OpenAI Chat Completions API: choices, finish_reason, JSON-stringified tool arguments.',
+    endpoint: '/api/test/mock-openai', defaultMsg: 'Hello GPT!',
+  },
+  {
+    id: 'mock-tools', name: 'MockAdapter + Tools', type: 'mock',
+    desc: 'MockAdapter with tool calling. Agent calls get_weather, gets result, then gives final answer.',
+    endpoint: '/api/test/mock-tools', defaultMsg: 'What is the weather in Seattle?',
+  },
+  {
+    id: 'anthropic', name: 'AnthropicAdapter', type: 'real',
+    desc: 'Real API call to Anthropic Claude via @anthropic-ai/sdk. Requires ANTHROPIC_API_KEY.',
+    endpoint: '/api/test/anthropic', defaultMsg: 'Say hello and tell me what model you are.',
+  },
+  {
+    id: 'openai', name: 'OpenAIAdapter', type: 'real',
+    desc: 'Real API call to OpenAI GPT via openai SDK. Requires OPENAI_API_KEY.',
+    endpoint: '/api/test/openai', defaultMsg: 'Say hello and tell me what model you are.',
+  },
+];
+
+let adapterStatus = {};
+
+async function init() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    adapterStatus = data.adapters || {};
+  } catch {}
+  renderCards();
+}
+
+function renderCards() {
+  const container = document.getElementById('cards');
+  container.innerHTML = ADAPTERS.map(a => {
+    const statusKey = a.id.replace(/-/g, '').replace('mock', 'mock');
+    const keyMap = { mock: 'mock', 'mock-anthropic': 'mockAnthropic', 'mock-openai': 'mockOpenAI', 'mock-tools': 'mockTools', anthropic: 'anthropic', openai: 'openai' };
+    const status = adapterStatus[keyMap[a.id]];
+    const available = status ? status.available : a.type === 'mock';
+    const badgeClass = a.type === 'real' ? (available ? 'badge-real' : 'badge-unavail') : 'badge-mock';
+    const badgeText = a.type === 'real' ? (available ? 'REAL API' : 'NO API KEY') : 'MOCK';
+
+    return `
+    <div class="card">
+      <div class="card-head">
+        <h3>${a.name}</h3>
+        <span class="badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="card-body">
+        <div class="card-desc">${a.desc}</div>
+        <div class="input-row">
+          <input id="input-${a.id}" placeholder="${a.defaultMsg}" value="${a.defaultMsg}" />
+          <button class="btn btn-primary" id="btn-${a.id}" onclick="testAdapter('${a.id}')" ${!available ? 'disabled' : ''}>
+            Run
+          </button>
+        </div>
+        <div class="result" id="result-${a.id}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function testAdapter(id) {
+  const adapter = ADAPTERS.find(a => a.id === id);
+  const btn = document.getElementById(`btn-${id}`);
+  const input = document.getElementById(`input-${id}`);
+  const resultEl = document.getElementById(`result-${id}`);
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Running...';
+  resultEl.className = 'result show';
+  resultEl.innerHTML = '<span class="spinner"></span> Calling adapter...';
+
+  try {
+    const res = await fetch(adapter.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: input.value }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      resultEl.innerHTML = `
+        <div class="result-header">
+          <span class="result-status result-err">ERROR</span>
+        </div>
+        <div class="result-error">${esc(data.error)}${data.hint ? '<br><br>' + esc(data.hint) : ''}</div>`;
+    } else {
+      const narrativeHtml = (data.narrative || []).map(n =>
+        `<div class="narrative-line">${esc(typeof n === 'string' ? n : n.sentence || JSON.stringify(n))}</div>`
+      ).join('');
+
+      resultEl.innerHTML = `
+        <div class="result-header">
+          <span class="result-status ${data.success ? 'result-ok' : 'result-err'}">${data.success ? 'SUCCESS' : 'FAILED'}</span>
+          <span class="result-time">${data.durationMs}ms &middot; ${data.iterations} iteration(s)</span>
+        </div>
+        <div class="result-response">${esc(data.response)}</div>
+        ${narrativeHtml ? `
+          <div class="narrative-toggle" onclick="toggleNarrative('${id}')">Show narrative (${data.narrative.length} entries)</div>
+          <div class="narrative-box" id="narrative-${id}">${narrativeHtml}</div>
+        ` : ''}`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `
+      <div class="result-header"><span class="result-status result-err">NETWORK ERROR</span></div>
+      <div class="result-error">${esc(e.message)}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run';
+}
+
+function toggleNarrative(id) {
+  const el = document.getElementById(`narrative-${id}`);
+  el.classList.toggle('show');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentFootPrints Demo</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242838;
+    --border: #2e3347;
+    --text: #e4e6f0;
+    --text2: #8b8fa7;
+    --accent: #6c8cff;
+    --accent2: #4a6aef;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+    --yellow: #fbbf24;
+    --red: #f87171;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header h1 span { color: var(--accent); }
+  .header .subtitle { color: var(--text2); font-size: 13px; }
+  .header .nav-link { margin-left: auto; font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; transition: all 0.2s; }
+  .header .nav-link:hover { background: var(--accent); color: white; }
+
+  /* Tab bar */
+  .tabs { display: flex; gap: 4px; padding: 12px 32px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); transition: all 0.2s; border: 1px solid transparent; white-space: nowrap; }
+  .tab:hover { background: var(--surface); color: var(--text); }
+  .tab.active { background: var(--accent2); color: white; border-color: var(--accent); }
+  .tab .tab-sub { font-size: 10px; opacity: 0.7; display: block; margin-top: 2px; }
+
+  /* Main layout */
+  .main { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* Section cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .card-header h2 { font-size: 14px; font-weight: 600; }
+  .card-header .badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-build { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .badge-runtime { background: rgba(74,222,128,0.15); color: var(--green); }
+  .badge-recorder { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .card-body { padding: 20px; }
+
+  /* Two-column layout */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+  /* Flowchart */
+  .flowchart { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 20px; justify-content: center; }
+  .flow-node { padding: 10px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; border: 2px solid var(--border); background: var(--surface2); cursor: pointer; transition: all 0.2s; text-align: center; min-width: 100px; position: relative; }
+  .flow-node:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .flow-node.active { border-color: var(--green); background: rgba(74,222,128,0.1); box-shadow: 0 0 12px rgba(74,222,128,0.2); }
+  .flow-node.decision { border-radius: 8px; border-color: var(--orange); border-style: dashed; }
+  .flow-node.decision.active { border-color: var(--orange); background: rgba(251,146,60,0.1); }
+  .flow-node .node-label { font-size: 11px; font-weight: 600; }
+  .flow-node .node-desc { font-size: 9px; color: var(--text2); margin-top: 4px; max-width: 140px; }
+  .flow-arrow { color: var(--text2); font-size: 18px; display: flex; align-items: center; padding: 0 2px; }
+  .flow-arrow.active { color: var(--green); }
+  .flow-branch-container { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .flow-branches { display: flex; gap: 12px; }
+  .flow-branch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .flow-branch-label { font-size: 9px; color: var(--text2); font-style: italic; }
+  .flow-branch-label.active { color: var(--green); font-weight: 600; }
+  .flow-loop-label { font-size: 9px; color: var(--orange); margin-top: 4px; }
+
+  /* Description list */
+  .desc-list { list-style: none; }
+  .desc-item { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; cursor: pointer; transition: background 0.15s; }
+  .desc-item:last-child { border-bottom: none; }
+  .desc-item:hover { background: var(--surface2); }
+  .desc-item.active { background: rgba(108,140,255,0.1); border-left: 3px solid var(--accent); }
+  .desc-item .step-num { color: var(--accent); font-weight: 700; margin-right: 6px; font-size: 12px; }
+  .desc-item .step-name { font-weight: 600; color: var(--text); }
+  .desc-item .step-desc { color: var(--text2); }
+  .desc-item .step-dash { color: var(--text2); margin: 0 6px; }
+  .desc-item .branch-indent { padding-left: 24px; color: var(--orange); }
+
+  /* Narrative timeline */
+  .narrative-list { list-style: none; }
+  .narrative-item { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; display: flex; gap: 10px; }
+  .narrative-item:last-child { border-bottom: none; }
+  .narrative-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-top: 6px; flex-shrink: 0; }
+  .narrative-text { color: var(--text2); }
+  .narrative-item:nth-child(odd) .narrative-dot { background: var(--cyan); }
+
+  /* Stage detail panel */
+  .stage-detail { padding: 20px; }
+  .stage-detail h3 { font-size: 16px; margin-bottom: 12px; color: var(--accent); }
+  .stage-detail .detail-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+  .stage-detail .detail-label { color: var(--text2); min-width: 100px; }
+  .stage-detail .detail-value { color: var(--text); }
+
+  /* Result panel */
+  .result-box { background: var(--surface2); border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+
+  /* Recorder stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+  .stat-card { background: var(--surface2); border-radius: 8px; padding: 12px; text-align: center; }
+  .stat-value { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 10px; color: var(--text2); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 60px; color: var(--text2); }
+  .loading .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Cascade banner */
+  .cascade-banner { background: linear-gradient(135deg, rgba(108,140,255,0.1), rgba(74,222,128,0.1)); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 4px; }
+  .cascade-banner h3 { font-size: 14px; margin-bottom: 8px; }
+  .cascade-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .cascade-step { background: var(--surface2); padding: 6px 12px; border-radius: 6px; font-weight: 500; }
+  .cascade-arrow { color: var(--text2); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Agent<span>FootPrints</span> Demo</h1>
+  <div class="subtitle">Build-time descriptions + Runtime narratives + Recorder data</div>
+  <a href="/adapter-test.html" class="nav-link">Adapter Test &rarr;</a>
+</div>
+
+<div class="tabs" id="tabs"></div>
+
+<div class="main" id="main">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Building patterns and running mock executions...</div>
+  </div>
+</div>
+
+<script>
+let patterns = [];
+let activePattern = 0;
+let activeStage = null;
+
+// ── Flowchart shapes for each pattern ──
+const FLOW_SHAPES = {
+  react: {
+    stages: [
+      { name: 'Initialize', desc: 'Load LLM & tools', runtime: true },
+      { name: 'Assemble Prompt', desc: 'Build message', runtime: true },
+      { name: 'Call LLM', desc: 'Ask the LLM', runtime: true },
+      { name: 'Parse Response', desc: 'Read response', runtime: true },
+    ],
+    decider: { name: 'Route Decider', desc: 'Tools or done?', runtime: true },
+    branches: [
+      { id: 'execute-tools', name: 'Execute Tools', desc: 'Run tools', runtime: true, loopBack: true },
+      { id: 'finalize', name: 'Finalize', desc: 'Final answer', runtime: true },
+    ],
+    runtimePath: ['Initialize', 'Assemble Prompt', 'Call LLM', 'Parse Response', 'Route Decider', 'Execute Tools', 'Call LLM', 'Parse Response', 'Route Decider', 'Finalize'],
+    activeBranch: 1, // finalize is the final one taken
+  },
+  linear: null, // built dynamically from description
+  swarm: {
+    stages: [{ name: 'Initialize', desc: 'Set up agents', runtime: true }],
+    decider: { name: 'Swarm Router', desc: 'Which agent?', runtime: true },
+    branches: [
+      { id: 'triage', name: 'Agent-triage', desc: 'Classify request', runtime: true, loopBack: true },
+      { id: 'billing', name: 'Agent-billing', desc: 'Billing answers', runtime: true },
+      { id: 'technical', name: 'Agent-technical', desc: 'Tech support', runtime: false },
+    ],
+    runtimePath: ['Initialize', 'Swarm Router', 'Agent-triage', 'Swarm Router', 'Agent-billing'],
+    activeBranch: 1,
+  },
+  pipeline: null,
+  fanout: null,
+};
+
+async function init() {
+  try {
+    const res = await fetch('/api/patterns');
+    patterns = await res.json();
+    renderTabs();
+    renderPattern(0);
+  } catch (e) {
+    document.getElementById('main').innerHTML = `<div class="loading" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function renderTabs() {
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = patterns.map((p, i) =>
+    `<div class="tab ${i === 0 ? 'active' : ''}" onclick="switchTab(${i})">
+      ${p.name}
+      <span class="tab-sub">${p.subtitle}</span>
+    </div>`
+  ).join('');
+}
+
+function switchTab(i) {
+  activePattern = i;
+  activeStage = null;
+  document.querySelectorAll('.tab').forEach((t, j) => t.classList.toggle('active', j === i));
+  renderPattern(i);
+}
+
+function renderPattern(i) {
+  const p = patterns[i];
+  const main = document.getElementById('main');
+
+  // Parse description into steps — filter out header lines like "Pipeline: name" and "Steps:"
+  const descLines = (p.description || '').split('\n').filter(l => {
+    const t = l.trim();
+    if (!t) return false;
+    // Keep lines starting with a number (steps) or → (branches)
+    if (/^\d/.test(t) || t.startsWith('→') || t.startsWith('->')) return true;
+    // Skip header lines: "PatternName: name", "Steps:", "Branches:"
+    if (/^(Pipeline|SimpleAgent|ReactAgent|ToolChain|FanOut|Swarm|Steps|Branches|Hierarchy)[:\s]/i.test(t)) return false;
+    return true;
+  });
+
+  main.innerHTML = `
+    <!-- Cascade Banner -->
+    <div class="cascade-banner">
+      <h3>The Cascade: Stage Descriptions \u2192 Tool Identity \u2192 LLM Understanding</h3>
+      <div class="cascade-flow">
+        <span class="cascade-step" style="border-left:3px solid var(--accent)">\u270D\uFE0F Stage Descriptions</span>
+        <span class="cascade-arrow">\u2192</span>
+        <span class="cascade-step" style="border-left:3px solid var(--cyan)">\uD83D\uDCCB FlowChart.description</span>
+        <span class="cascade-arrow">\u2192</span>
+        <span class="cascade-step" style="border-left:3px solid var(--green)">\uD83E\uDD16 Tool/Agent Description for LLM</span>
+        <span class="cascade-arrow">\u2192</span>
+        <span class="cascade-step" style="border-left:3px solid var(--orange)">\uD83D\uDCD6 Runtime Narrative</span>
+      </div>
+    </div>
+
+    <!-- Flowchart -->
+    <div class="card">
+      <div class="card-header">
+        <h2>\uD83D\uDDFA\uFE0F Flowchart</h2>
+        <span class="badge badge-build">Build-time Structure</span>
+        <span class="badge badge-runtime">Runtime Path</span>
+      </div>
+      <div class="card-body">
+        <div class="flowchart" id="flowchart"></div>
+      </div>
+    </div>
+
+    <!-- Description + Narrative -->
+    <div class="split">
+      <div class="card">
+        <div class="card-header">
+          <h2>\uD83D\uDCDD Build-time Description</h2>
+          <span class="badge badge-build">What I CAN do</span>
+        </div>
+        <ul class="desc-list" id="desc-list">
+          ${descLines.map((line, j) => {
+            const isBranch = line.trim().startsWith('\u2192') || line.trim().startsWith('->');
+            const parsed = parseLine(line);
+            return `<li class="desc-item" onclick="selectStage('${parsed.name}', ${j})" data-idx="${j}">
+              ${isBranch ? '<span class="branch-indent">\u2514\u2500</span>' : `<span class="step-num">${parsed.num}</span>`}
+              <span class="step-name">${parsed.name}</span>
+              ${parsed.desc ? `<span class="step-dash">\u2014</span><span class="step-desc">${parsed.desc}</span>` : ''}
+            </li>`;
+          }).join('')}
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2>\uD83D\uDCD6 Runtime Narrative</h2>
+          <span class="badge badge-runtime">What I DID</span>
+        </div>
+        <ul class="narrative-list">
+          ${(p.narrative || []).map((line, j) =>
+            `<li class="narrative-item">
+              <div class="narrative-dot"></div>
+              <div class="narrative-text">${escHtml(line)}</div>
+            </li>`
+          ).join('') || '<li class="narrative-item"><div class="narrative-text" style="color:var(--text2);font-style:italic;">No runtime narrative available</div></li>'}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Result + Recorder -->
+    <div class="split">
+      <div class="card">
+        <div class="card-header">
+          <h2>\u2705 Execution Result</h2>
+        </div>
+        <div class="card-body">
+          <div class="result-box">${escHtml(p.result || '(no result)')}</div>
+        </div>
+      </div>
+
+      ${p.recorderStats ? `
+      <div class="card">
+        <div class="card-header">
+          <h2>\uD83D\uDCCA LLMRecorder Stats</h2>
+          <span class="badge badge-recorder">Layer 2</span>
+        </div>
+        <div class="card-body">
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalCalls}</div><div class="stat-label">LLM Calls</div></div>
+            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalTokens}</div><div class="stat-label">Total Tokens</div></div>
+            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalInputTokens}</div><div class="stat-label">Input Tokens</div></div>
+            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalOutputTokens}</div><div class="stat-label">Output Tokens</div></div>
+            <div class="stat-card"><div class="stat-value">${Math.round(p.recorderStats.averageLatencyMs || 0)}ms</div><div class="stat-label">Avg Latency</div></div>
+            <div class="stat-card"><div class="stat-value">${p.recorderStats.streamingCalls}/${p.recorderStats.nonStreamingCalls}</div><div class="stat-label">Stream/Non</div></div>
+          </div>
+        </div>
+      </div>` : `
+      <div class="card">
+        <div class="card-header">
+          <h2>\uD83D\uDD0D Stage Detail</h2>
+        </div>
+        <div class="card-body" id="stage-detail">
+          <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px;">Click a stage in the flowchart or description to see details</div>
+        </div>
+      </div>`}
+    </div>
+  `;
+
+  renderFlowchart(p);
+}
+
+function renderFlowchart(p) {
+  const container = document.getElementById('flowchart');
+  if (!container) return;
+
+  const shape = FLOW_SHAPES[p.flowShape];
+
+  if (p.flowShape === 'react' && shape) {
+    renderReactFlow(container, shape, p);
+  } else if (p.flowShape === 'swarm' && shape) {
+    renderSwarmFlow(container, shape, p);
+  } else {
+    // Linear/pipeline/fanout: parse from description
+    renderLinearFlow(container, p);
+  }
+}
+
+function renderReactFlow(container, shape, p) {
+  const rp = new Set(shape.runtimePath);
+  let html = '';
+
+  // Linear stages
+  shape.stages.forEach((s, i) => {
+    const active = rp.has(s.name);
+    html += `<div class="flow-node ${active ? 'active' : ''}" onclick="selectStage('${s.name}')" title="${s.desc}">
+      <div class="node-label">${s.name}</div>
+      <div class="node-desc">${s.desc}</div>
+    </div>`;
+    if (i < shape.stages.length - 1) {
+      html += `<div class="flow-arrow ${active ? 'active' : ''}">\u2192</div>`;
+    }
+  });
+
+  // Arrow to decider
+  html += `<div class="flow-arrow active">\u2192</div>`;
+
+  // Decider + branches
+  html += `<div class="flow-branch-container">`;
+  html += `<div class="flow-node decision active" onclick="selectStage('${shape.decider.name}')" title="${shape.decider.desc}">
+    <div class="node-label">${shape.decider.name}</div>
+    <div class="node-desc">${shape.decider.desc}</div>
+  </div>`;
+  html += `<div class="flow-branches">`;
+  shape.branches.forEach(b => {
+    const active = rp.has(b.name);
+    html += `<div class="flow-branch">
+      <div class="flow-branch-label ${active ? 'active' : ''}">${b.id}</div>
+      <div class="flow-node ${active ? 'active' : ''}" onclick="selectStage('${b.name}')" title="${b.desc}">
+        <div class="node-label">${b.name}</div>
+        <div class="node-desc">${b.desc}</div>
+      </div>
+      ${b.loopBack ? '<div class="flow-loop-label">\u21A9 loop back to Call LLM</div>' : ''}
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  container.innerHTML = html;
+}
+
+function renderSwarmFlow(container, shape, p) {
+  const rp = new Set(shape.runtimePath);
+  let html = '';
+
+  // Seed stage
+  const s = shape.stages[0];
+  html += `<div class="flow-node ${rp.has(s.name) ? 'active' : ''}" onclick="selectStage('${s.name}')">
+    <div class="node-label">${s.name}</div>
+    <div class="node-desc">${s.desc}</div>
+  </div>`;
+  html += `<div class="flow-arrow active">\u2192</div>`;
+
+  // Router + branches
+  html += `<div class="flow-branch-container">`;
+  html += `<div class="flow-node decision active" onclick="selectStage('${shape.decider.name}')">
+    <div class="node-label">${shape.decider.name}</div>
+    <div class="node-desc">${shape.decider.desc}</div>
+  </div>`;
+  html += `<div class="flow-branches">`;
+  shape.branches.forEach(b => {
+    const active = rp.has(b.name);
+    html += `<div class="flow-branch">
+      <div class="flow-branch-label ${active ? 'active' : ''}">${b.id}</div>
+      <div class="flow-node ${active ? 'active' : ''}" onclick="selectStage('${b.name}')">
+        <div class="node-label">${b.name}</div>
+        <div class="node-desc">${b.desc}</div>
+      </div>
+      ${b.loopBack ? '<div class="flow-loop-label">\u21A9 handoff \u2192 Swarm Router</div>' : ''}
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  container.innerHTML = html;
+}
+
+function renderLinearFlow(container, p) {
+  const lines = (p.description || '').split('\n').filter(l => {
+    const t = l.trim();
+    if (!t) return false;
+    if (/^\d/.test(t)) return true;
+    if (t.startsWith('\u2192') || t.startsWith('->')) return true;
+    return false;
+  });
+  let html = '';
+  let nodeCount = 0;
+  const isParallel = p.flowShape === 'fanout';
+
+  lines.forEach((line) => {
+    const parsed = parseLine(line);
+    const isBranch = line.trim().startsWith('\u2192') || line.trim().startsWith('->');
+    const isSubflow = parsed.name.includes('[Subflow:') || parsed.name.includes('[Parallel:');
+    const cleanName = parsed.name.replace(/\[Subflow:\s*|\[Parallel:\s*|\]/g, '').trim();
+
+    if (!isBranch) {
+      if (nodeCount > 0) {
+        html += `<div class="flow-arrow active">${isParallel && nodeCount === 1 ? '\u21C9' : '\u2192'}</div>`;
+      }
+      html += `<div class="flow-node active${isSubflow ? ' decision' : ''}" onclick="selectStage('${cleanName}')">
+        <div class="node-label">${cleanName}</div>
+        <div class="node-desc">${truncate(parsed.desc, 35)}</div>
+      </div>`;
+      nodeCount++;
+    }
+  });
+
+  container.innerHTML = html;
+}
+
+function selectStage(name, idx) {
+  activeStage = name;
+  const p = patterns[activePattern];
+
+  // Highlight in description list
+  document.querySelectorAll('.desc-item').forEach(el => el.classList.remove('active'));
+  if (idx !== undefined) {
+    const el = document.querySelector(`.desc-item[data-idx="${idx}"]`);
+    if (el) el.classList.add('active');
+  }
+
+  // Show stage detail
+  const detail = document.getElementById('stage-detail');
+  if (!detail) return;
+
+  const stageDesc = (p.stageDescriptions || {})[name] || 'No description available';
+
+  detail.innerHTML = `
+    <div class="stage-detail">
+      <h3>${name}</h3>
+      <div class="detail-row">
+        <span class="detail-label">Description:</span>
+        <span class="detail-value">${escHtml(stageDesc)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Pattern:</span>
+        <span class="detail-value">${p.name}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Layer:</span>
+        <span class="detail-value">Build-time (stage description cascades into tool definition)</span>
+      </div>
+    </div>
+  `;
+}
+
+function parseLine(line) {
+  const trimmed = line.trim();
+  // Match: "1. StageName — Description" or "1. [Subflow: Step-name] — Description"
+  const numMatch = trimmed.match(/^(\d+\w?)\.\s+(.+?)\s*\u2014\s*(.*)/);
+  if (numMatch) return { num: numMatch[1], name: numMatch[2].trim(), desc: numMatch[3] };
+
+  // Match without em-dash: "1. StageName - Description"
+  const numDash = trimmed.match(/^(\d+\w?)\.\s+(.+?)\s+[\-]{1,2}\s+(.*)/);
+  if (numDash) return { num: numDash[1], name: numDash[2].trim(), desc: numDash[3] };
+
+  // Branch: "→ branchId: Description"
+  const branchMatch = trimmed.match(/^[\u2192>]\s*(.+?):\s*(.*)/);
+  if (branchMatch) return { num: '\u2192', name: branchMatch[1], desc: branchMatch[2] };
+
+  // Fallback: split on em-dash
+  const dashIdx = trimmed.indexOf('\u2014');
+  if (dashIdx > 0) return { num: '', name: trimmed.slice(0, dashIdx).trim(), desc: trimmed.slice(dashIdx + 1).trim() };
+
+  return { num: '', name: trimmed, desc: '' };
+}
+
+function truncate(str, len) {
+  if (!str || str.length <= len) return str || '';
+  return str.slice(0, len) + '...';
+}
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>
+
