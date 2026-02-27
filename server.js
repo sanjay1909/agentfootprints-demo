@@ -4,6 +4,7 @@ const path = require('path');
 // ── Require agentFootprints from dist ──
 const AFPROOT = '/tmp/agentFootprints';
 const ADAPTERS_ROOT = '/tmp/agent-footprint-adapters';
+const METRIC_ADAPTERS_ROOT = '/tmp/footprint-metric-adapters';
 
 const { AgentBuilder } = require(`${AFPROOT}/dist/builder/AgentBuilder`);
 const { AgentExecutor } = require(`${AFPROOT}/dist/executor/AgentExecutor`);
@@ -21,6 +22,18 @@ const { MockOpenAIAdapter } = require(`${AFPROOT}/dist/adapters/examples/MockOpe
 // ── Real adapters (Layer 2) ──
 const { AnthropicAdapter } = require(`${ADAPTERS_ROOT}/dist/src/anthropic/AnthropicAdapter`);
 const { OpenAIAdapter } = require(`${ADAPTERS_ROOT}/dist/src/openai/OpenAIAdapter`);
+
+// ── Metric Adapters (footprint-metric-adapters) ──
+const { MockMetricAdapter } = require(`${METRIC_ADAPTERS_ROOT}/dist/adapters/mock/MockMetricAdapter`);
+const { MockCloudWatchAdapter } = require(`${METRIC_ADAPTERS_ROOT}/dist/adapters/cloudwatch/MockCloudWatchAdapter`);
+const { MockPrometheusAdapter } = require(`${METRIC_ADAPTERS_ROOT}/dist/adapters/prometheus/MockPrometheusAdapter`);
+const { MockDatadogAdapter } = require(`${METRIC_ADAPTERS_ROOT}/dist/adapters/datadog/MockDatadogAdapter`);
+const { MetricCollector } = require(`${METRIC_ADAPTERS_ROOT}/dist/collector/MetricCollector`);
+const { RingBufferStrategy } = require(`${METRIC_ADAPTERS_ROOT}/dist/strategies/RingBufferStrategy`);
+const { TumblingWindowStrategy } = require(`${METRIC_ADAPTERS_ROOT}/dist/strategies/TumblingWindowStrategy`);
+const { SlidingWindowStrategy } = require(`${METRIC_ADAPTERS_ROOT}/dist/strategies/SlidingWindowStrategy`);
+const { ExecutionTree } = require(`${METRIC_ADAPTERS_ROOT}/dist/tree/ExecutionTree`);
+const { TreeNavigator } = require(`${METRIC_ADAPTERS_ROOT}/dist/tree/TreeNavigator`);
 
 // ── Server ──
 const app = express();
@@ -608,11 +621,400 @@ app.get('/api/patterns', async (req, res) => {
       });
     }
 
+    // ── 6. MetricPipeline overview ──
+    {
+      results.push({
+        name: 'MetricPipeline',
+        subtitle: '3-stage metric subflow',
+        flowShape: 'pipeline',
+        description: [
+          '1. CollectMetric — Validate and normalize incoming metric entries from scope recorders',
+          '2. ApplyStrategy — Apply window strategy (RingBuffer/Tumbling/Sliding) and compute percentiles',
+          '3. ExportMetric — Export aggregated results to backend (CloudWatch/Prometheus/Datadog/Console)',
+        ].join('\n'),
+        stageDescriptions: {
+          'CollectMetric': 'Reads entries from METRIC_PATHS.INPUT.ENTRIES, validates stageName + metric + value, pushes to WindowStrategy',
+          'ApplyStrategy': 'Calls strategy.getMetricResult() — computes p50/p95/p99 percentiles, stage breakdowns, error counts',
+          'ExportMetric': 'Formats MetricResult for backend: PutMetricData (CW), exposition text (Prometheus), series (Datadog), console.log',
+        },
+        narrative: [
+          'The metric adapter subflow mirrors the LLM adapter: 3-stage FlowChart from createMetricSubflow()',
+          'Window strategies are composable SubFlows: swap RingBuffer ↔ Tumbling ↔ Sliding at runtime',
+          'MetricCollector recorder bridges scope events (onError, onStageEnd) to metric entries',
+          'Each backend adapter exports in its native format: CloudWatch dimensions, Prometheus labels, Datadog tags',
+        ],
+        result: 'CollectMetric → ApplyStrategy → ExportMetric → MetricExportResult { success, destination, entriesExported }',
+      });
+    }
+
+    // ── 7. FullWorkflow overview ──
+    {
+      results.push({
+        name: 'FullWorkflow',
+        subtitle: 'Complete architecture',
+        flowShape: 'pipeline',
+        description: [
+          '1. AgentBuilder — Define agent with adapter, tools, recorders, system prompt',
+          '2. AgentExecutor.run() — Execute the agent loop: Assemble → Call LLM → Parse → Route',
+          '3. LLM Adapter SubFlow — FormatRequest → ExecuteCall → MapResponse (Anthropic/OpenAI/Mock)',
+          '4. 6 Recorders — Narrative, LLM, Cost, Metric, Debug, Alarm all fire on scope events',
+          '5. MetricCollector — Bridges scope events into metric pipeline entries',
+          '6. Metric Adapter SubFlow — CollectMetric → ApplyStrategy → ExportMetric (CloudWatch/Prometheus/Datadog)',
+          '7. Tree of IDs — ExecutionTree builds LLM-navigable tree from Builder descriptions + Narrative',
+        ].join('\n'),
+        stageDescriptions: {
+          'AgentBuilder': 'DSL: AgentBuilder.agent(name, {adapter, toolRegistry}).systemPrompt(...).useTool(...).withRecorder(...).build()',
+          'AgentExecutor.run()': 'Runs the agent loop: Initialize → Assemble Prompt → Call LLM → Parse → Route Decider → Execute Tools / Finalize',
+          'LLM Adapter SubFlow': '3-stage FlowChart: FormatRequest → ExecuteCall → MapResponse. Each provider (Anthropic/OpenAI) implements differently',
+          '6 Recorders': 'Layer 0: Narrative, Metric, Debug, Alarm. Layer 1: LLM, Cost. All attach to Scope and fire on events',
+          'MetricCollector': 'Recorder that converts onStageEnd → latency entries, onError → errorCount entries into WindowStrategy',
+          'Metric Adapter SubFlow': '3-stage FlowChart: CollectMetric → ApplyStrategy → ExportMetric. Backends: CloudWatch, Prometheus, Datadog, Console',
+          'Tree of IDs': 'ExecutionTree.addStage() + TreeNavigator: getSummary() → drillDown(id) → getChildren(id). LLM-friendly lazy navigation',
+        },
+        narrative: [
+          'The full FootPrint stack has 3 layers: FootPrint (L0), AgentFootPrints (L1), agent-footprint-adapters (L2)',
+          'footprint-metric-adapters extends L0 with observability: metric collection + window strategies + Tree of IDs',
+          'LLM adapters and Metric adapters share the same pattern: 3-stage FlowChart subflow via factory function',
+          'Tree of IDs enables LLMs to explore execution: getSummary() returns IDs+descriptions, drillDown(id) returns full details',
+          'Customer: "What happened to my request?" → LLM navigates tree → finds error → explains in natural language',
+          'Provider: "Why did this fail?" → LLM drills into error node → shows reads/writes/metrics → root cause analysis',
+        ],
+        result: 'AgentBuilder → AgentExecutor → LLM Adapter → Recorders → MetricCollector → Metric Adapter → Tree of IDs → LLM Navigation',
+      });
+    }
+
     res.json(results);
   } catch (e) {
     res.status(500).json({ error: e.message, stack: e.stack });
   }
 });
+
+// ============================================================================
+// Metric Adapters endpoint — demonstrates all 4 metric adapters + Tree of IDs
+// ============================================================================
+app.get('/api/metric-adapters', async (req, res) => {
+  try {
+    // ── Generate realistic mock metric entries ──
+    const stages = ['Initialize', 'Assemble Prompt', 'Call LLM', 'Parse Response', 'Execute Tools', 'Finalize'];
+    const now = Date.now();
+
+    function generateEntries() {
+      const entries = [];
+      // Simulate 3 pipeline runs with varying latencies
+      for (let run = 0; run < 3; run++) {
+        const baseTime = now - (2 - run) * 10000;
+        for (let i = 0; i < stages.length; i++) {
+          const stageName = stages[i];
+          // Call LLM is slowest (100-800ms), others are fast (5-50ms)
+          const isLLM = stageName === 'Call LLM';
+          const latency = isLLM
+            ? 100 + Math.random() * 700
+            : 5 + Math.random() * 45;
+
+          entries.push({
+            stageName,
+            metric: 'latency',
+            value: latency,
+            timestamp: baseTime + i * 100,
+          });
+          entries.push({
+            stageName,
+            metric: 'stageInvocation',
+            value: 1,
+            timestamp: baseTime + i * 100,
+          });
+          // Add a read/write count
+          entries.push({
+            stageName,
+            metric: 'readCount',
+            value: 1,
+            timestamp: baseTime + i * 100,
+          });
+          entries.push({
+            stageName,
+            metric: 'writeCount',
+            value: 1,
+            timestamp: baseTime + i * 100,
+          });
+        }
+        // Add an error in Execute Tools on run 2
+        if (run === 1) {
+          entries.push({
+            stageName: 'Execute Tools',
+            metric: 'errorCount',
+            value: 1,
+            timestamp: baseTime + 400,
+            metadata: { error: 'Tool timeout: get_weather took >5s', operation: 'read' },
+          });
+        }
+      }
+      return entries;
+    }
+
+    const entries = generateEntries();
+
+    // ── Create all 4 adapters ──
+    const adapterResults = {};
+
+    // 1. MockMetricAdapter (in-memory, ringBuffer)
+    {
+      const adapter = MockMetricAdapter({ windowConfig: { type: 'ringBuffer', maxSize: 500 } });
+      const strategy = adapter.getStrategy();
+      for (const e of entries) { strategy.push(e); }
+      const result = strategy.getMetricResult();
+      adapterResults.mock = {
+        name: 'MockMetricAdapter',
+        destination: 'mock://in-memory',
+        strategy: 'Ring Buffer (last 500 entries)',
+        icon: 'test',
+        color: '#6c8cff',
+        description: 'In-memory adapter for testing. Stores all metrics in arrays for assertions.',
+        capabilities: { supportsHistograms: true, supportsLabels: true, supportsPush: true },
+        result: serializeMetricResult(result),
+        exportCount: entries.length,
+      };
+    }
+
+    // 2. MockCloudWatchAdapter (tumbling window)
+    {
+      const adapter = MockCloudWatchAdapter({
+        namespace: 'FootPrint/AgentPipeline',
+        windowConfig: { type: 'tumbling', windowMs: 60000 },
+      });
+      const strategy = adapter.getStrategy();
+      for (const e of entries) { strategy.push(e); }
+      const result = strategy.getMetricResult();
+
+      // Build CloudWatch-format output
+      const cwData = [];
+      const lp = result.latencyPercentiles;
+      if (lp.count > 0) {
+        cwData.push({
+          MetricName: 'PipelineLatency',
+          Dimensions: [{ Name: 'Pipeline', Value: 'Overall' }],
+          StatisticValues: { SampleCount: lp.count, Sum: +(lp.mean * lp.count).toFixed(1), Minimum: +lp.min.toFixed(1), Maximum: +lp.max.toFixed(1) },
+          Unit: 'Milliseconds',
+        });
+      }
+      for (const [stageName, sp] of result.stagePercentiles) {
+        cwData.push({
+          MetricName: 'StageLatency',
+          Dimensions: [{ Name: 'StageName', Value: stageName }],
+          StatisticValues: { SampleCount: sp.count, Sum: +(sp.mean * sp.count).toFixed(1), Minimum: +sp.min.toFixed(1), Maximum: +sp.max.toFixed(1) },
+          Unit: 'Milliseconds',
+        });
+      }
+
+      adapterResults.cloudwatch = {
+        name: 'MockCloudWatchAdapter',
+        destination: 'cloudwatch://FootPrint/AgentPipeline',
+        strategy: 'Tumbling Window (60s buckets)',
+        icon: 'cloud',
+        color: '#ff9900',
+        description: 'Simulates AWS CloudWatch PutMetricData. Uses tumbling windows (1-min periods). Formats as Namespace + MetricName + Dimensions.',
+        capabilities: { supportsHistograms: true, supportsLabels: true, supportsPush: true },
+        result: serializeMetricResult(result),
+        exportFormat: {
+          type: 'CloudWatch PutMetricData',
+          namespace: 'FootPrint/AgentPipeline',
+          metricData: cwData,
+        },
+        exportCount: cwData.length,
+      };
+    }
+
+    // 3. MockPrometheusAdapter (ringBuffer, pull-based)
+    {
+      const adapter = MockPrometheusAdapter({
+        prefix: 'footprint_pipeline',
+        windowConfig: { type: 'ringBuffer', maxSize: 1000 },
+      });
+      const strategy = adapter.getStrategy();
+      for (const e of entries) { strategy.push(e); }
+      const result = strategy.getMetricResult();
+
+      // Build Prometheus exposition text
+      const promLines = [];
+      const lp = result.latencyPercentiles;
+      if (lp.count > 0) {
+        promLines.push('# HELP footprint_pipeline_latency_milliseconds Pipeline stage latency');
+        promLines.push('# TYPE footprint_pipeline_latency_milliseconds summary');
+        promLines.push('footprint_pipeline_latency_milliseconds{quantile="0.5"} ' + lp.p50.toFixed(3));
+        promLines.push('footprint_pipeline_latency_milliseconds{quantile="0.95"} ' + lp.p95.toFixed(3));
+        promLines.push('footprint_pipeline_latency_milliseconds{quantile="0.99"} ' + lp.p99.toFixed(3));
+        promLines.push('footprint_pipeline_latency_milliseconds_count ' + lp.count);
+      }
+      for (const [stageName, sp] of result.stagePercentiles) {
+        const safe = stageName.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+        promLines.push('footprint_pipeline_stage_latency_milliseconds{stage="' + safe + '",quantile="0.5"} ' + sp.p50.toFixed(3));
+        promLines.push('footprint_pipeline_stage_latency_milliseconds{stage="' + safe + '",quantile="0.95"} ' + sp.p95.toFixed(3));
+        promLines.push('footprint_pipeline_stage_latency_milliseconds{stage="' + safe + '",quantile="0.99"} ' + sp.p99.toFixed(3));
+      }
+      if (result.totalErrors > 0) {
+        promLines.push('# TYPE footprint_pipeline_errors_total counter');
+        promLines.push('footprint_pipeline_errors_total ' + result.totalErrors);
+      }
+      promLines.push('# TYPE footprint_pipeline_invocations_total counter');
+      promLines.push('footprint_pipeline_invocations_total ' + result.totalInvocations);
+
+      adapterResults.prometheus = {
+        name: 'MockPrometheusAdapter',
+        destination: 'prometheus:///metrics',
+        strategy: 'Ring Buffer (last 1000 entries)',
+        icon: 'fire',
+        color: '#e6522c',
+        description: 'Simulates Prometheus pull-based metrics. Ring buffer stores latest data. Exports as exposition text format (quantiles, counters).',
+        capabilities: { supportsHistograms: true, supportsLabels: true, supportsPush: false },
+        result: serializeMetricResult(result),
+        exportFormat: {
+          type: 'Prometheus Exposition',
+          expositionText: promLines.join('\n'),
+        },
+        exportCount: promLines.filter(l => !l.startsWith('#')).length,
+      };
+    }
+
+    // 4. MockDatadogAdapter (sliding window)
+    {
+      const adapter = MockDatadogAdapter({
+        prefix: 'footprint.pipeline',
+        tags: ['env:demo', 'service:agentfootprints'],
+        windowConfig: { type: 'sliding', windowMs: 300000 },
+      });
+      const strategy = adapter.getStrategy();
+      for (const e of entries) { strategy.push(e); }
+      const result = strategy.getMetricResult();
+
+      const ddSeries = [];
+      const tsNow = Math.floor(Date.now() / 1000);
+      const lp = result.latencyPercentiles;
+      if (lp.count > 0) {
+        ddSeries.push({
+          metric: 'footprint.pipeline.latency',
+          type: 'distribution',
+          points: [{ timestamp: tsNow, value: lp.p50 }, { timestamp: tsNow, value: lp.p95 }, { timestamp: tsNow, value: lp.p99 }],
+          tags: ['env:demo', 'service:agentfootprints', 'metric_type:latency'],
+        });
+        ddSeries.push({
+          metric: 'footprint.pipeline.latency.avg',
+          type: 'gauge',
+          points: [{ timestamp: tsNow, value: +lp.mean.toFixed(1) }],
+          tags: ['env:demo', 'service:agentfootprints'],
+        });
+      }
+      for (const [stageName, sp] of result.stagePercentiles) {
+        ddSeries.push({
+          metric: 'footprint.pipeline.stage.latency',
+          type: 'distribution',
+          points: [{ timestamp: tsNow, value: +sp.p50.toFixed(1) }, { timestamp: tsNow, value: +sp.p95.toFixed(1) }],
+          tags: ['env:demo', 'service:agentfootprints', 'stage:' + stageName.replace(/\s+/g, '_').toLowerCase()],
+        });
+      }
+      if (result.totalErrors > 0) {
+        ddSeries.push({
+          metric: 'footprint.pipeline.errors',
+          type: 'count',
+          points: [{ timestamp: tsNow, value: result.totalErrors }],
+          tags: ['env:demo', 'service:agentfootprints'],
+        });
+      }
+
+      adapterResults.datadog = {
+        name: 'MockDatadogAdapter',
+        destination: 'datadog://api.datadoghq.com/v2/series',
+        strategy: 'Sliding Window (last 300s)',
+        icon: 'dog',
+        color: '#632ca6',
+        description: 'Simulates Datadog API series submission. Sliding window tracks last 5 minutes. Tags metrics with key:value pairs.',
+        capabilities: { supportsHistograms: true, supportsLabels: true, supportsPush: true },
+        result: serializeMetricResult(result),
+        exportFormat: {
+          type: 'Datadog v2 Series',
+          series: ddSeries,
+          apiKey: 'mock-dd-api-key-xxx',
+        },
+        exportCount: ddSeries.length,
+      };
+    }
+
+    // ── Build Tree of IDs ──
+    const tree = new ExecutionTree();
+    const stageTimings = {};
+    // Group entries by stage and compute timings
+    for (const e of entries) {
+      if (e.metric === 'latency') {
+        if (!stageTimings[e.stageName]) {
+          stageTimings[e.stageName] = { total: 0, count: 0 };
+        }
+        stageTimings[e.stageName].total += e.value;
+        stageTimings[e.stageName].count += 1;
+      }
+    }
+
+    const stageDescriptions = {
+      'Initialize': 'Sets up the adapter FlowChart, tool registry, and recorder chain',
+      'Assemble Prompt': 'Combines system prompt, conversation history, and user message into messages array',
+      'Call LLM': 'Runs the 3-stage adapter subflow: FormatRequest → ExecuteCall → MapResponse',
+      'Parse Response': 'Reads AdapterResult discriminated union (type: final | tools | error)',
+      'Execute Tools': 'Calls registered tool handlers and collects results for next LLM call',
+      'Finalize': 'Extracts final text response and ends the agent loop',
+    };
+
+    for (let i = 0; i < stages.length; i++) {
+      const stageName = stages[i];
+      const timing = stageTimings[stageName];
+      const avgDuration = timing ? timing.total / timing.count : 0;
+      const hasError = stageName === 'Execute Tools'; // We injected an error here
+
+      tree.addStage({
+        id: stageName.toLowerCase().replace(/\s+/g, '-'),
+        name: stageName,
+        builderDescription: stageDescriptions[stageName] || stageName,
+        narrativeSentences: [
+          'The pipeline executed ' + stageName + (hasError ? ' with 1 error.' : ' successfully.'),
+          'Average latency: ' + avgDuration.toFixed(1) + 'ms across ' + (timing ? timing.count : 0) + ' invocations.',
+        ],
+        nodeType: stageName === 'Execute Tools' ? 'subflow' : 'stage',
+        durationMs: avgDuration,
+        hasError: hasError,
+        errorMessage: hasError ? 'Tool timeout: get_weather took >5s' : undefined,
+      });
+    }
+
+    const navigator = new TreeNavigator(tree);
+    const treeSummary = navigator.getSummary();
+    const errorDrillDown = navigator.drillDown('execute-tools');
+
+    res.json({
+      adapters: adapterResults,
+      treeOfIds: {
+        summary: treeSummary,
+        errorDrillDown: errorDrillDown,
+        stageCount: tree.getStageCount(),
+      },
+      meta: {
+        totalEntries: entries.length,
+        stagesSimulated: stages.length,
+        runsSimulated: 3,
+      },
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, stack: e.stack });
+  }
+});
+
+// Helper to serialize MetricResult (Maps → Objects)
+function serializeMetricResult(result) {
+  return {
+    latencyPercentiles: result.latencyPercentiles,
+    stagePercentiles: Object.fromEntries(result.stagePercentiles),
+    totalErrors: result.totalErrors,
+    stageErrors: Object.fromEntries(result.stageErrors),
+    totalInvocations: result.totalInvocations,
+    windowInfo: result.windowInfo,
+    computedAt: result.computedAt,
+  };
+}
 
 // ============================================================================
 // Status endpoint — shows which adapters are available

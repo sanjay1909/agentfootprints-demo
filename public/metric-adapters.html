@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FootPrint — Metric Adapters &amp; Tree of IDs</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #242838;
+    --border: #2e3347; --text: #e4e6f0; --text2: #8b8fa7;
+    --accent: #6c8cff; --green: #4ade80; --orange: #fb923c;
+    --red: #f87171; --cyan: #22d3ee; --yellow: #fbbf24;
+    --pink: #f472b6; --purple: #a78bfa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 16px; }
+  .header-left { flex: 1; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .header h1 span { color: var(--orange); }
+  .header .sub { color: var(--text2); font-size: 13px; margin-top: 4px; }
+  .header .nav-link { font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+  .header .nav-link:hover { background: var(--accent); color: white; }
+  .header .nav-link.active { background: var(--orange); color: white; border-color: var(--orange); }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+
+  /* Architecture banner */
+  .arch-banner { display: flex; gap: 8px; align-items: center; margin-bottom: 24px; font-size: 12px; flex-wrap: wrap; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .arch-step { padding: 6px 14px; border-radius: 6px; font-weight: 600; background: rgba(108,140,255,0.15); color: var(--accent); border: 1px solid rgba(108,140,255,0.3); }
+  .arch-step.s2 { background: rgba(251,146,60,0.15); color: var(--orange); border-color: rgba(251,146,60,0.3); }
+  .arch-step.s3 { background: rgba(74,222,128,0.15); color: var(--green); border-color: rgba(74,222,128,0.3); }
+  .arch-arrow { color: var(--text2); }
+  .arch-desc { font-size: 11px; color: var(--text2); margin-left: auto; }
+
+  /* Section headers */
+  .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; margin-top: 32px; }
+  .section-header:first-of-type { margin-top: 0; }
+  .section-header h2 { font-size: 18px; font-weight: 600; }
+  .section-header .section-badge { font-size: 10px; padding: 3px 10px; border-radius: 4px; font-weight: 600; }
+
+  /* Adapter cards grid */
+  .adapter-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .adapter-grid { grid-template-columns: 1fr; } }
+
+  .adapter-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color 0.2s; }
+  .adapter-card:hover { border-color: var(--accent); }
+  .adapter-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .adapter-head .adapter-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+  .adapter-head .adapter-title { flex: 1; }
+  .adapter-head .adapter-title h3 { font-size: 13px; font-weight: 600; }
+  .adapter-head .adapter-title .adapter-dest { font-size: 10px; color: var(--text2); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .adapter-head .adapter-strategy { font-size: 9px; padding: 2px 8px; border-radius: 3px; font-weight: 600; background: rgba(108,140,255,0.15); color: var(--accent); }
+  .adapter-body { padding: 14px 18px; }
+  .adapter-desc { font-size: 11px; color: var(--text2); line-height: 1.5; margin-bottom: 10px; }
+
+  /* Capability badges */
+  .cap-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .cap-badge { font-size: 9px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .cap-yes { background: rgba(74,222,128,0.15); color: var(--green); }
+  .cap-no { background: rgba(248,113,113,0.1); color: var(--red); opacity: 0.6; }
+
+  /* Stats row */
+  .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .stat { background: var(--bg); padding: 6px 10px; border-radius: 6px; text-align: center; min-width: 70px; }
+  .stat .val { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { font-size: 9px; color: var(--text2); margin-top: 2px; }
+
+  /* Percentile table */
+  .pct-table { width: 100%; font-size: 11px; border-collapse: collapse; margin-bottom: 10px; }
+  .pct-table th { text-align: left; color: var(--text2); font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+  .pct-table td { padding: 4px 8px; border-bottom: 1px solid rgba(46,51,71,0.5); }
+  .pct-table td:first-child { color: var(--text); font-weight: 500; }
+  .pct-table .pct-val { font-family: 'JetBrains Mono', monospace; color: var(--orange); }
+
+  /* Data toggle */
+  .data-toggle { padding: 8px 12px; font-size: 11px; color: var(--accent); cursor: pointer; display: flex; align-items: center; gap: 6px; background: var(--surface2); border-radius: 8px; margin-top: 8px; }
+  .data-toggle:hover { background: rgba(108,140,255,0.05); }
+  .data-toggle .chevron { transition: transform 0.2s; display: inline-block; }
+  .data-toggle .chevron.open { transform: rotate(90deg); }
+  .data-content { display: none; padding: 10px 12px; font-size: 11px; color: var(--text2); line-height: 1.7; max-height: 300px; overflow-y: auto; background: var(--surface2); border-radius: 0 0 8px 8px; margin-top: -4px; }
+  .data-content.show { display: block; }
+  .data-content pre { font-family: 'JetBrains Mono', monospace; font-size: 10px; white-space: pre-wrap; color: var(--text); }
+
+  /* Tree of IDs section */
+  .tree-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 16px; }
+  .tree-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .tree-head h3 { font-size: 14px; font-weight: 600; }
+  .tree-body { padding: 18px; }
+
+  .tree-summary-text { background: var(--surface2); border-radius: 8px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.8; white-space: pre-wrap; color: var(--text); margin-bottom: 16px; border: 1px solid var(--border); }
+
+  /* Tree node list */
+  .tree-nodes { list-style: none; }
+  .tree-node { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.15s; font-size: 12px; }
+  .tree-node:last-child { border-bottom: none; }
+  .tree-node:hover { background: var(--surface2); }
+  .tree-node.selected { background: rgba(108,140,255,0.1); border-left: 3px solid var(--accent); }
+  .tree-node.has-error { border-left: 3px solid var(--red); }
+  .tree-node-id { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 600; min-width: 130px; font-size: 11px; }
+  .tree-node-name { font-weight: 500; min-width: 120px; }
+  .tree-node-desc { color: var(--text2); flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tree-node-dur { font-family: 'JetBrains Mono', monospace; color: var(--cyan); font-size: 11px; }
+  .tree-node-status { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+  .status-success { background: rgba(74,222,128,0.15); color: var(--green); }
+  .status-error { background: rgba(248,113,113,0.15); color: var(--red); }
+
+  /* Drilldown panel */
+  .drilldown { background: var(--surface2); border-radius: 8px; padding: 16px; margin-top: 16px; border: 1px solid var(--border); }
+  .drilldown h4 { font-size: 14px; color: var(--accent); margin-bottom: 12px; }
+  .drilldown-text { font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.8; white-space: pre-wrap; color: var(--text); }
+  .drilldown-label { font-size: 10px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px; margin-bottom: 4px; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 60px; color: var(--text2); }
+  .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Foot<span>Print</span> Metric Adapters</h1>
+    <div class="sub">4 Metric backends + Tree of IDs for LLM-navigable execution traces</div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:4px;">
+    <a href="/" class="nav-link">Main</a>
+    <a href="/adapter-test.html" class="nav-link">LLM Adapters</a>
+    <a href="/metric-adapters.html" class="nav-link active">Metric Adapters</a>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Architecture banner -->
+  <div class="arch-banner">
+    <span class="arch-step">CollectMetric</span>
+    <span class="arch-arrow">&rarr;</span>
+    <span class="arch-step s2">ApplyStrategy</span>
+    <span class="arch-arrow">&rarr;</span>
+    <span class="arch-step s3">ExportMetric</span>
+    <span class="arch-desc">Every metric adapter is a 3-stage FlowChart subflow</span>
+  </div>
+
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div>Loading metric adapters and building Tree of IDs...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let data = null;
+let selectedNode = null;
+
+const ADAPTER_ICONS = {
+  mock: { icon: '\uD83E\uDDEA', bg: 'rgba(108,140,255,0.15)' },
+  cloudwatch: { icon: '\u2601\uFE0F', bg: 'rgba(255,153,0,0.15)' },
+  prometheus: { icon: '\uD83D\uDD25', bg: 'rgba(230,82,44,0.15)' },
+  datadog: { icon: '\uD83D\uDC36', bg: 'rgba(99,44,166,0.15)' },
+};
+
+async function init() {
+  try {
+    const res = await fetch('/api/metric-adapters');
+    data = await res.json();
+    render();
+  } catch (e) {
+    document.getElementById('content').innerHTML = '<div class="loading" style="color:var(--red)">Error: ' + esc(e.message) + '</div>';
+  }
+}
+
+function render() {
+  const el = document.getElementById('content');
+
+  el.innerHTML = `
+    <!-- Metric Adapters Section -->
+    <div class="section-header">
+      <h2>\u26A1 Metric Adapters</h2>
+      <span class="section-badge" style="background:rgba(251,146,60,0.15);color:var(--orange)">4 ADAPTERS</span>
+      <span style="font-size:11px;color:var(--text2)">${data.meta.totalEntries} entries &middot; ${data.meta.runsSimulated} pipeline runs &middot; ${data.meta.stagesSimulated} stages</span>
+    </div>
+
+    <div class="adapter-grid" id="adapter-grid"></div>
+
+    <!-- Tree of IDs Section -->
+    <div class="section-header" style="margin-top:32px">
+      <h2>\uD83C\uDF33 Tree of IDs</h2>
+      <span class="section-badge" style="background:rgba(108,140,255,0.15);color:var(--accent)">LLM-NAVIGABLE</span>
+      <span style="font-size:11px;color:var(--text2)">${data.treeOfIds.stageCount} stages tracked</span>
+    </div>
+
+    <div class="tree-section">
+      <div class="tree-head">
+        <h3>\uD83D\uDCCB Execution Summary</h3>
+        <span style="font-size:10px;color:var(--text2);margin-left:auto;">LLM calls getSummary() \u2192 sees this \u2192 calls drillDown(id) for details</span>
+      </div>
+      <div class="tree-body">
+        <div class="tree-summary-text" id="tree-summary"></div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="font-size:12px;font-weight:600;">\uD83D\uDD0D Stage Navigator</span>
+          <span style="font-size:10px;color:var(--text2);">Click any stage to drill down</span>
+        </div>
+        <ul class="tree-nodes" id="tree-nodes"></ul>
+
+        <div id="drilldown-panel"></div>
+      </div>
+    </div>
+  `;
+
+  renderAdapters();
+  renderTree();
+}
+
+function renderAdapters() {
+  const grid = document.getElementById('adapter-grid');
+  const order = ['mock', 'cloudwatch', 'prometheus', 'datadog'];
+
+  grid.innerHTML = order.map(key => {
+    const a = data.adapters[key];
+    if (!a) return '';
+    const iconInfo = ADAPTER_ICONS[key] || { icon: '\uD83D\uDCCA', bg: 'rgba(108,140,255,0.15)' };
+    const r = a.result;
+    const lp = r.latencyPercentiles;
+    const caps = a.capabilities;
+
+    // Build per-stage percentile table
+    let pctTable = '';
+    if (r.stagePercentiles && Object.keys(r.stagePercentiles).length > 0) {
+      pctTable = '<table class="pct-table"><tr><th>Stage</th><th>p50</th><th>p95</th><th>p99</th><th>min</th><th>max</th><th>n</th></tr>';
+      for (const [stage, sp] of Object.entries(r.stagePercentiles)) {
+        pctTable += '<tr><td>' + esc(stage) + '</td>' +
+          '<td class="pct-val">' + sp.p50.toFixed(1) + '</td>' +
+          '<td class="pct-val">' + sp.p95.toFixed(1) + '</td>' +
+          '<td class="pct-val">' + sp.p99.toFixed(1) + '</td>' +
+          '<td class="pct-val">' + sp.min.toFixed(1) + '</td>' +
+          '<td class="pct-val">' + sp.max.toFixed(1) + '</td>' +
+          '<td>' + sp.count + '</td></tr>';
+      }
+      pctTable += '</table>';
+    }
+
+    // Export format preview
+    let exportPreview = '';
+    if (a.exportFormat) {
+      const ef = a.exportFormat;
+      let previewContent = '';
+      if (ef.type === 'CloudWatch PutMetricData') {
+        previewContent = JSON.stringify({ Namespace: ef.namespace, MetricData: ef.metricData }, null, 2);
+      } else if (ef.type === 'Prometheus Exposition') {
+        previewContent = ef.expositionText;
+      } else if (ef.type === 'Datadog v2 Series') {
+        previewContent = JSON.stringify({ series: ef.series }, null, 2);
+      }
+      if (previewContent) {
+        exportPreview = renderToggle(key + '-export', ef.type + ' (' + a.exportCount + ' metrics)', previewContent);
+      }
+    }
+
+    return `
+    <div class="adapter-card" style="border-top: 3px solid ${a.color}">
+      <div class="adapter-head">
+        <div class="adapter-icon" style="background:${iconInfo.bg}">${iconInfo.icon}</div>
+        <div class="adapter-title">
+          <h3>${a.name}</h3>
+          <div class="adapter-dest">${a.destination}</div>
+        </div>
+        <span class="adapter-strategy">${a.strategy}</span>
+      </div>
+      <div class="adapter-body">
+        <div class="adapter-desc">${a.description}</div>
+        <div class="cap-row">
+          <span class="cap-badge ${caps.supportsHistograms ? 'cap-yes' : 'cap-no'}">Histograms ${caps.supportsHistograms ? '\u2713' : '\u2717'}</span>
+          <span class="cap-badge ${caps.supportsLabels ? 'cap-yes' : 'cap-no'}">Labels ${caps.supportsLabels ? '\u2713' : '\u2717'}</span>
+          <span class="cap-badge ${caps.supportsPush ? 'cap-yes' : 'cap-no'}">Push ${caps.supportsPush ? '\u2713' : '\u2717'}</span>
+        </div>
+        <div class="stats-row">
+          <div class="stat"><div class="val" style="color:${a.color}">${lp.p50.toFixed(0)}<span style="font-size:10px">ms</span></div><div class="lbl">p50</div></div>
+          <div class="stat"><div class="val" style="color:${a.color}">${lp.p95.toFixed(0)}<span style="font-size:10px">ms</span></div><div class="lbl">p95</div></div>
+          <div class="stat"><div class="val" style="color:${a.color}">${lp.p99.toFixed(0)}<span style="font-size:10px">ms</span></div><div class="lbl">p99</div></div>
+          <div class="stat"><div class="val" style="color:${r.totalErrors > 0 ? 'var(--red)' : 'var(--green)'}">${r.totalErrors}</div><div class="lbl">Errors</div></div>
+          <div class="stat"><div class="val" style="color:var(--cyan)">${r.totalInvocations}</div><div class="lbl">Invocations</div></div>
+        </div>
+        ${pctTable}
+        ${exportPreview}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTree() {
+  const summary = data.treeOfIds.summary;
+  document.getElementById('tree-summary').textContent = summary.textSummary;
+
+  const nodesEl = document.getElementById('tree-nodes');
+  nodesEl.innerHTML = summary.nodes.map(n => {
+    const isError = n.status === 'error';
+    const dur = n.durationMs !== undefined ? n.durationMs.toFixed(1) + 'ms' : '';
+    return `
+    <li class="tree-node ${isError ? 'has-error' : ''}" onclick="selectTreeNode('${n.id}')" id="tnode-${n.id}">
+      <span class="tree-node-id">[${n.id}]</span>
+      <span class="tree-node-name">${esc(n.name)}</span>
+      <span class="tree-node-desc">${esc(n.description)}</span>
+      <span class="tree-node-dur">${dur}</span>
+      <span class="tree-node-status ${isError ? 'status-error' : 'status-success'}">${isError ? 'ERROR' : 'OK'}</span>
+    </li>`;
+  }).join('');
+
+  // Auto-show the error drilldown
+  if (data.treeOfIds.errorDrillDown) {
+    showDrillDown(data.treeOfIds.errorDrillDown);
+    selectedNode = data.treeOfIds.errorDrillDown.node.id;
+    const el = document.getElementById('tnode-' + selectedNode);
+    if (el) el.classList.add('selected');
+  }
+}
+
+function selectTreeNode(id) {
+  // Un-select previous
+  document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('tnode-' + id);
+  if (el) el.classList.add('selected');
+  selectedNode = id;
+
+  // Find this node in summary data and show details
+  const node = data.treeOfIds.summary.nodes.find(n => n.id === id);
+  if (!node) return;
+
+  // If it's the error node and we have drilldown data, show that
+  if (data.treeOfIds.errorDrillDown && data.treeOfIds.errorDrillDown.node.id === id) {
+    showDrillDown(data.treeOfIds.errorDrillDown);
+    return;
+  }
+
+  // Show basic info for other nodes
+  const panel = document.getElementById('drilldown-panel');
+  const dur = node.durationMs !== undefined ? node.durationMs.toFixed(1) + 'ms' : 'N/A';
+  const status = node.status === 'error' ? 'ERROR' : 'SUCCESS';
+
+  panel.innerHTML = `
+    <div class="drilldown">
+      <h4>\uD83D\uDD0D [${node.id}] ${esc(node.name)}</h4>
+      <div class="drilldown-label">Status</div>
+      <div style="font-size:12px;">${status} &middot; ${dur}</div>
+      <div class="drilldown-label">Description</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6">${esc(node.description)}</div>
+      <div style="margin-top:12px;font-size:10px;color:var(--text2);font-style:italic;">
+        LLM would call: navigator.drillDown("${node.id}") for full reads, writes, metrics, errors
+      </div>
+    </div>
+  `;
+}
+
+function showDrillDown(dd) {
+  const panel = document.getElementById('drilldown-panel');
+  panel.innerHTML = `
+    <div class="drilldown">
+      <h4>\uD83D\uDD0D DrillDown: [${dd.node.id}] ${esc(dd.node.name)}</h4>
+      <div class="drilldown-text">${esc(dd.textDetail)}</div>
+    </div>
+  `;
+}
+
+function renderToggle(id, label, content) {
+  return `
+    <div class="data-toggle" onclick="toggleData('${id}')">
+      <span class="chevron" id="chev-${id}">\u25B6</span> ${label}
+    </div>
+    <div class="data-content" id="dc-${id}">
+      <pre>${esc(content)}</pre>
+    </div>`;
+}
+
+function toggleData(id) {
+  const el = document.getElementById('dc-' + id);
+  const chev = document.getElementById('chev-' + id);
+  el.classList.toggle('show');
+  chev.classList.toggle('open');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>
