@@ -61,7 +61,7 @@ app.post('/api/test/mock', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
 
     res.json({
       adapter: 'MockAdapter',
@@ -97,7 +97,7 @@ app.post('/api/test/mock-anthropic', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
 
     res.json({
       adapter: 'MockAnthropicAdapter',
@@ -134,7 +134,7 @@ app.post('/api/test/mock-openai', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
 
     res.json({
       adapter: 'MockOpenAIAdapter',
@@ -188,7 +188,7 @@ app.post('/api/test/mock-tools', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
     const stats = llmRecorder.getAggregateStats();
 
     res.json({
@@ -234,7 +234,7 @@ app.post('/api/test/anthropic', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
 
     res.json({
       adapter: 'AnthropicAdapter (REAL)',
@@ -278,7 +278,7 @@ app.post('/api/test/openai', async (req, res) => {
 
     const executor = new AgentExecutor(build);
     const result = await executor.run(userMessage);
-    const narrative = narrativeRecorder.toFlatSentences();
+    const narrative = executor.getNarrative();
 
     res.json({
       adapter: 'OpenAIAdapter (REAL)',
@@ -379,7 +379,7 @@ app.get('/api/patterns', async (req, res) => {
           'Execute Tools': 'Calls registered tool handlers and collects results for next LLM call',
           'Finalize': 'Extracts final text response and ends the agent loop',
         },
-        narrative: narRec.toFlatSentences(),
+        narrative: executor.getNarrative(),
         result: result.response || '(no result)',
         // ── All 6 Recorder outputs ──
         recorders: {
@@ -520,7 +520,7 @@ app.get('/api/patterns', async (req, res) => {
           'Call LLM': 'Runs FormatRequest → ExecuteCall → MapResponse once',
           'Return Response': 'Takes the AdapterResult.text as final output',
         },
-        narrative: narRec.toFlatSentences(),
+        narrative: executor.getNarrative(),
         result: result.response || '(no result)',
       });
     }
@@ -555,7 +555,7 @@ app.get('/api/patterns', async (req, res) => {
           'ExecuteCall': 'Calls anthropic.messages.create(). Handles rate limits (429), auth (401), overloaded (529)',
           'MapResponse': 'Iterates content[] array, extracts text from text blocks, tool calls from tool_use blocks with input field',
         },
-        narrative: narRec.toFlatSentences(),
+        narrative: executor.getNarrative(),
         result: result.response || '(no result)',
       });
     }
@@ -590,7 +590,7 @@ app.get('/api/patterns', async (req, res) => {
           'ExecuteCall': 'Calls openai.chat.completions.create(). Streaming accumulates tool_calls across chunks by index',
           'MapResponse': 'Reads choices[0].message. Tool args are JSON-stringified strings that need JSON.parse()',
         },
-        narrative: narRec.toFlatSentences(),
+        narrative: executor.getNarrative(),
         result: result.response || '(no result)',
       });
     }
