@@ -548,17 +548,17 @@ function escHtml(str) {
 
 // ── Recorder Observatory renderer ──
 const REC_ICONS = {
-  book: '\uD83D\uDCD6', cpu: '\uD83E\uDDE0', dollar: '\uD83D\uDCB0', gauge: '\u26A1', bug: '\uD83D\uDD0D',
+  book: '\uD83D\uDCD6', cpu: '\uD83E\uDDE0', dollar: '\uD83D\uDCB0', gauge: '\u26A1', bug: '\uD83D\uDD0D', bell: '\uD83D\uDD14',
 };
 const REC_COLORS = {
-  book: 'var(--green)', cpu: 'var(--cyan)', dollar: 'var(--yellow)', gauge: 'var(--orange)', bug: 'var(--pink)',
+  book: 'var(--green)', cpu: 'var(--cyan)', dollar: 'var(--yellow)', gauge: 'var(--orange)', bug: 'var(--pink)', bell: 'var(--red)',
 };
 
 function renderRecorderObservatory(p) {
   const recs = p.recorders;
   if (!recs) return '';
 
-  const order = ['narrative', 'llm', 'cost', 'metric', 'debug'];
+  const order = ['narrative', 'llm', 'cost', 'metric', 'debug', 'alarm'];
   const cards = order.filter(k => recs[k]).map(key => {
     const r = recs[key];
     const icon = REC_ICONS[r.icon] || '\uD83D\uDCCA';
@@ -594,25 +594,89 @@ function renderRecorderObservatory(p) {
       }
     } else if (key === 'metric' && r.data) {
       const d = r.data;
-      statsHtml = `<div class="rec-stats-row">
-        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalReads || 0}</div><div class="lbl">Reads</div></div>
-        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalWrites || 0}</div><div class="lbl">Writes</div></div>
-        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalCommits || 0}</div><div class="lbl">Commits</div></div>
-      </div>`;
+      statsHtml = '<div class="rec-stats-row">' +
+        '<div class="rec-stat"><div class="val" style="color:var(--orange)">' + (d.totalReads || 0) + '</div><div class="lbl">Reads</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--orange)">' + (d.totalWrites || 0) + '</div><div class="lbl">Writes</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--orange)">' + (d.totalCommits || 0) + '</div><div class="lbl">Commits</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:' + (d.totalErrors ? 'var(--red)' : 'var(--green)') + '">' + (d.totalErrors || 0) + '</div><div class="lbl">Errors</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--cyan)">' + Math.round(d.totalDuration || 0) + 'ms</div><div class="lbl">Total Dur</div></div>' +
+      '</div>';
+      // Latency percentiles section
+      var lp = d.latencyPercentiles;
+      var lpHtml = '';
+      if (lp && Object.keys(lp).length) {
+        lpHtml = '<div style="margin-top:8px;padding:8px 12px;background:rgba(255,165,0,0.08);border-radius:8px;font-size:11px;">' +
+          '<div style="font-weight:600;margin-bottom:4px;color:var(--orange)">Latency Percentiles (ms)</div>';
+        Object.keys(lp).forEach(function(stage) {
+          var s = lp[stage];
+          lpHtml += '<div style="margin-bottom:2px;color:var(--text2)">' +
+            '<span style="color:var(--text);font-weight:500">' + stage + '</span> \u2014 ' +
+            'min:' + s.min.toFixed(1) + ' p50:' + s.p50.toFixed(1) + ' p95:' + s.p95.toFixed(1) + ' p99:' + s.p99.toFixed(1) + ' max:' + s.max.toFixed(1) + ' mean:' + s.mean.toFixed(1) +
+          '</div>';
+        });
+        lpHtml += '</div>';
+      }
+      statsHtml += lpHtml;
       if (d.stages && Object.keys(d.stages).length) {
         dataHtml = renderDataToggle(key, 'Per-Stage Metrics', JSON.stringify(d.stages, null, 2));
       }
     } else if (key === 'debug' && r.data) {
       const d = r.data;
+      var slowCount = d.slowStageWarnings ? d.slowStageWarnings.length : 0;
       statsHtml = '<div class="rec-stats-row">' +
         '<div class="rec-stat"><div class="val" style="color:var(--pink)">' + (d.totalEntries || 0) + '</div><div class="lbl">Entries</div></div>' +
         '<div class="rec-stat"><div class="val" style="color:' + (d.errors && d.errors.length ? 'var(--red)' : 'var(--green)') + '">' + (d.errors ? d.errors.length : 0) + '</div><div class="lbl">Errors</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:' + (slowCount > 0 ? 'var(--orange)' : 'var(--green)') + '">' + slowCount + '</div><div class="lbl">Slow Stages</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--text2)">' + (d.slowStageThresholdMs || 0) + 'ms</div><div class="lbl">Threshold</div></div>' +
       '</div>';
+      // Slow stage warnings
+      if (slowCount > 0) {
+        var swHtml = '<div style="margin-top:8px;padding:8px 12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);border-radius:8px;font-size:11px;">' +
+          '<div style="font-weight:600;margin-bottom:4px;color:var(--orange)">\u26A0 Slow Stage Warnings</div>';
+        d.slowStageWarnings.forEach(function(w) {
+          swHtml += '<div style="color:var(--text2)">' +
+            '<span style="color:var(--text);font-weight:500">' + w.stageName + '</span> \u2014 ' +
+            w.duration.toFixed(1) + 'ms (exceeded by ' + w.exceededBy.toFixed(1) + 'ms)' +
+          '</div>';
+        });
+        swHtml += '</div>';
+        statsHtml += swHtml;
+      }
       if (d.entries && d.entries.length) {
         var debugLines = d.entries.map(function(e) {
           return '[' + e.type + '] ' + e.stageName + ' | ' + (e.path ? e.path + '.' : '') + (e.key || '') + (e.value !== undefined ? ' = ' + JSON.stringify(e.value).slice(0, 80) : '');
         }).join('\n');
         dataHtml = renderDataToggle(key, 'Debug Entries (' + d.totalEntries + ')', debugLines);
+      }
+    } else if (key === 'alarm' && r.data) {
+      const d = r.data;
+      var activeCount = d.activeAlarms ? d.activeAlarms.length : 0;
+      var ruleCount = d.rules ? d.rules.length : 0;
+      statsHtml = '<div class="rec-stats-row">' +
+        '<div class="rec-stat"><div class="val" style="color:var(--cyan)">' + ruleCount + '</div><div class="lbl">Rules</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:' + (activeCount > 0 ? 'var(--red)' : 'var(--green)') + '">' + activeCount + '</div><div class="lbl">Active</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--orange)">' + (d.totalAlarmEvents || 0) + '</div><div class="lbl">Events</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:' + (d.totalErrors > 0 ? 'var(--red)' : 'var(--green)') + '">' + (d.totalErrors || 0) + '</div><div class="lbl">Errors</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:var(--text2)">' + (d.consecutiveErrors || 0) + '</div><div class="lbl">Consec Err</div></div>' +
+      '</div>';
+      // Rules summary
+      if (d.rules && d.rules.length) {
+        var rulesHtml = '<div style="margin-top:8px;padding:8px 12px;background:rgba(248,113,113,0.08);border-radius:8px;font-size:11px;">' +
+          '<div style="font-weight:600;margin-bottom:4px;color:var(--red)">Alarm Rules</div>';
+        d.rules.forEach(function(rule) {
+          var stateColor = rule.state === 'ALARM' ? 'var(--red)' : 'var(--green)';
+          rulesHtml += '<div style="margin-bottom:2px;display:flex;align-items:center;gap:6px;">' +
+            '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + stateColor + '"></span>' +
+            '<span style="color:var(--text);font-weight:500">' + rule.name + '</span>' +
+            '<span style="color:var(--text2)">' + rule.metric + ' > ' + rule.threshold + '</span>' +
+            '<span style="color:' + stateColor + ';font-weight:600;font-size:10px">' + rule.state + '</span>' +
+          '</div>';
+        });
+        rulesHtml += '</div>';
+        statsHtml += rulesHtml;
+      }
+      if (r.history && r.history.length) {
+        dataHtml = renderDataToggle(key, 'Alarm History (' + r.history.length + ')', JSON.stringify(r.history, null, 2));
       }
     } else if (key === 'narrative' && r.data) {
       var lines = Array.isArray(r.data) ? r.data : [];
@@ -624,7 +688,7 @@ function renderRecorderObservatory(p) {
       }
     }
 
-    return '<div class="rec-card' + (key === 'debug' ? ' rec-full' : '') + '">' +
+    return '<div class="rec-card' + (key === 'debug' || key === 'alarm' ? ' rec-full' : '') + '">' +
       '<div class="rec-card-head">' +
         '<div class="rec-icon" style="background:' + color + '22;color:' + color + '">' + icon + '</div>' +
         '<div class="rec-title">' +
@@ -645,7 +709,7 @@ function renderRecorderObservatory(p) {
     '<div class="observatory-header">' +
       '<h2>\uD83D\uDD2D Recorder Observatory</h2>' +
       '<span class="obs-sub">Built-in observability \u2014 no external APM needed</span>' +
-      '<span class="obs-badge">5 RECORDERS</span>' +
+      '<span class="obs-badge">6 RECORDERS</span>' +
     '</div>' +
     '<div class="rec-grid">' + cards.join('') + '</div>' +
   '</div>';

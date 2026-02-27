@@ -13,6 +13,7 @@ const { CostRecorder } = require(`${AFPROOT}/dist/recorders/CostRecorder`);
 const { NarrativeRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/NarrativeRecorder`);
 const { MetricRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/MetricRecorder`);
 const { DebugRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/DebugRecorder`);
+const { AlarmRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/AlarmRecorder`);
 const { MockAdapter } = require(`${AFPROOT}/dist/adapters/mock/MockAdapter`);
 const { MockAnthropicAdapter } = require(`${AFPROOT}/dist/adapters/examples/MockAnthropicAdapter`);
 const { MockOpenAIAdapter } = require(`${AFPROOT}/dist/adapters/examples/MockOpenAIAdapter`);
@@ -299,12 +300,22 @@ app.get('/api/patterns', async (req, res) => {
         inputSchema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
         handler: async (input) => JSON.stringify({ temp: '72°F', condition: 'Sunny', city: input.city }),
       });
-      // All 5 recorders attached
+      // All 6 recorders attached
       const llmRec = new LLMRecorder('react-demo');
       const costRec = new CostRecorder({ id: 'react-demo' });
       const narRec = new NarrativeRecorder({ id: 'react-demo', detail: 'full' });
-      const metricRec = new MetricRecorder({ id: 'react-demo' });
-      const debugRec = new DebugRecorder({ id: 'react-demo', verbosity: 'verbose' });
+      const metricRec = new MetricRecorder('react-demo');
+      const debugRec = new DebugRecorder({ id: 'react-demo', verbosity: 'verbose', slowStageThresholdMs: 500 });
+      const alarmRec = new AlarmRecorder({
+        id: 'react-demo',
+        rules: [
+          { name: 'high-error-rate', metric: 'errorCount', threshold: 3, comparison: 'gte' },
+          { name: 'slow-stage', metric: 'stageDuration', threshold: 2000, comparison: 'gt', stageName: 'Call LLM' },
+          { name: 'cascade-failure', metric: 'consecutiveErrors', threshold: 2, comparison: 'gte' },
+        ],
+        onAlarm: (evt) => console.log('[ALARM]', evt.ruleName, 'value:', evt.metricValue),
+        onResolve: (evt) => console.log('[RESOLVED]', evt.ruleName),
+      });
 
       const build = AgentBuilder.agent('react-agent', { adapter: flowChart, toolRegistry: reg })
         .systemPrompt('You are a weather assistant. Use the get_weather tool to answer questions.')
@@ -314,6 +325,7 @@ app.get('/api/patterns', async (req, res) => {
         .withRecorder(narRec)
         .withRecorder(metricRec)
         .withRecorder(debugRec)
+        .withRecorder(alarmRec)
         .maxLoopIterations(5)
         .build();
 
@@ -322,8 +334,15 @@ app.get('/api/patterns', async (req, res) => {
 
       // Collect all recorder outputs
       const metrics = metricRec.getMetrics();
+      const latencyPercentiles = {};
+      const allLatencies = metricRec.getAllLatencyPercentiles();
+      for (const [stage, lp] of allLatencies) {
+        latencyPercentiles[stage] = lp;
+      }
       const debugEntries = debugRec.getEntries();
+      const slowWarnings = debugRec.getSlowStageWarnings();
       const costAggregate = costRec.getAggregateCosts();
+      const alarmSummary = alarmRec.getSummary();
 
       results.push({
         name: 'ReactAgent',
@@ -349,7 +368,7 @@ app.get('/api/patterns', async (req, res) => {
         },
         narrative: narRec.toFlatSentences(),
         result: result.response || '(no result)',
-        // ── All 5 Recorder outputs ──
+        // ── All 6 Recorder outputs ──
         recorders: {
           narrative: {
             label: 'NarrativeRecorder',
@@ -384,45 +403,71 @@ app.get('/api/patterns', async (req, res) => {
           },
           metric: {
             label: 'MetricRecorder',
-            category: 'Performance',
+            category: 'Performance & Latency Histogram',
             icon: 'gauge',
             layer: 0,
-            description: 'Production metrics: read/write/commit counts per stage, execution duration, invocation counts. Lightweight enough for always-on production use.',
-            analogy: 'Prometheus / Datadog Metrics',
+            description: 'Production metrics: read/write/commit/error counts per stage, latency percentiles (p50/p95/p99), execution duration. Lightweight enough for always-on production use.',
+            analogy: 'Prometheus / Datadog Metrics + Histograms',
             data: {
               totalReads: metrics.totalReads,
               totalWrites: metrics.totalWrites,
               totalCommits: metrics.totalCommits,
+              totalErrors: metrics.totalErrors,
+              totalDuration: metrics.totalDuration,
+              latencyPercentiles: latencyPercentiles,
               stages: Object.fromEntries(
-                Array.from(metrics.stages || new Map()).map(([name, m]) => [name, {
-                  readCount: m.readCount,
-                  writeCount: m.writeCount,
-                  commitCount: m.commitCount,
-                  totalDuration: m.totalDuration,
-                  invocationCount: m.invocationCount,
-                }])
+                Array.from(metrics.stageMetrics || new Map()).map(function(entry) {
+                  var name = entry[0], m = entry[1];
+                  return [name, {
+                    readCount: m.readCount,
+                    writeCount: m.writeCount,
+                    commitCount: m.commitCount,
+                    errorCount: m.errorCount,
+                    totalDuration: m.totalDuration,
+                    invocationCount: m.invocationCount,
+                    latencySamples: m.latencies ? m.latencies.length : 0,
+                  }];
+                })
               ),
             },
           },
           debug: {
             label: 'DebugRecorder',
-            category: 'Debug & Inspection',
+            category: 'Debug & Slow Stage Detection',
             icon: 'bug',
             layer: 0,
-            description: 'Captures all mutations (writes), errors, and optionally reads with full values. Verbose mode gives complete internal state at every step.',
-            analogy: 'Chrome DevTools / Debug Logs',
+            description: 'Captures all mutations (writes), errors, and optionally reads with full values. Automatically flags slow stages exceeding a configurable latency threshold.',
+            analogy: 'Chrome DevTools / Debug Logs + Slow Query Log',
             data: {
               totalEntries: debugEntries.length,
-              errors: debugRec.getErrors().map(e => ({ stageName: e.stageName, type: e.type, timestamp: e.timestamp, data: e.data })),
-              entries: debugEntries.slice(0, 50).map(e => ({
-                type: e.type,
-                stageName: e.stageName,
-                timestamp: e.timestamp,
-                path: e.data?.path,
-                key: e.data?.key,
-                value: typeof e.data?.value === 'string' ? e.data.value.slice(0, 100) : e.data?.value,
-              })),
+              slowStageThresholdMs: debugRec.getSlowStageThreshold(),
+              slowStageWarnings: slowWarnings.map(function(w) {
+                return { stageName: w.stageName, duration: w.duration, threshold: w.threshold, exceededBy: w.exceededBy };
+              }),
+              errors: debugRec.getErrors().map(function(e) {
+                return { stageName: e.stageName, type: e.type, timestamp: e.timestamp, data: e.data };
+              }),
+              entries: debugEntries.slice(0, 50).map(function(e) {
+                return {
+                  type: e.type,
+                  stageName: e.stageName,
+                  timestamp: e.timestamp,
+                  path: e.data && e.data.path,
+                  key: e.data && e.data.key,
+                  value: typeof (e.data && e.data.value) === 'string' ? e.data.value.slice(0, 100) : (e.data && e.data.value),
+                };
+              }),
             },
+          },
+          alarm: {
+            label: 'AlarmRecorder',
+            category: 'Threshold Alarms',
+            icon: 'bell',
+            layer: 0,
+            description: 'Threshold-based alarm system. Configurable rules watch error counts, latency, consecutive failures. Fires callbacks when breached. Auto-resolves when metric returns to normal.',
+            analogy: 'CloudWatch Alarms / PagerDuty',
+            data: alarmSummary,
+            history: alarmRec.getAlarmHistory(),
           },
         },
         // Keep legacy field for backward compat
