@@ -121,6 +121,46 @@
   .cascade-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; }
   .cascade-step { background: var(--surface2); padding: 6px 12px; border-radius: 6px; font-weight: 500; }
   .cascade-arrow { color: var(--text2); }
+
+  /* ── Recorder Observatory ── */
+  .observatory { margin-top: 8px; }
+  .observatory-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .observatory-header h2 { font-size: 16px; font-weight: 600; }
+  .observatory-header .obs-sub { font-size: 11px; color: var(--text2); }
+  .observatory-header .obs-badge { font-size: 10px; padding: 3px 10px; border-radius: 4px; font-weight: 600; background: rgba(251,146,60,0.15); color: var(--orange); }
+
+  .rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 1000px) { .rec-grid { grid-template-columns: 1fr; } }
+  .rec-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color 0.2s; }
+  .rec-card:hover { border-color: var(--accent); }
+  .rec-card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .rec-card-head .rec-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .rec-card-head .rec-title { flex: 1; }
+  .rec-card-head .rec-title h3 { font-size: 13px; font-weight: 600; }
+  .rec-card-head .rec-title .rec-category { font-size: 10px; color: var(--text2); margin-top: 2px; }
+  .rec-card-head .rec-layer { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+  .rec-layer-0 { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .rec-layer-1 { background: rgba(34,211,238,0.15); color: var(--cyan); }
+  .rec-card-body { padding: 14px 18px; }
+  .rec-desc { font-size: 11px; color: var(--text2); line-height: 1.5; margin-bottom: 10px; }
+  .rec-analogy { font-size: 10px; color: var(--orange); margin-bottom: 12px; font-style: italic; }
+
+  .rec-data { background: var(--surface2); border-radius: 8px; overflow: hidden; }
+  .rec-data-toggle { padding: 8px 12px; font-size: 11px; color: var(--accent); cursor: pointer; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); }
+  .rec-data-toggle:hover { background: rgba(108,140,255,0.05); }
+  .rec-data-toggle .chevron { transition: transform 0.2s; display: inline-block; }
+  .rec-data-toggle .chevron.open { transform: rotate(90deg); }
+  .rec-data-content { display: none; padding: 10px 12px; font-size: 11px; color: var(--text2); line-height: 1.7; max-height: 250px; overflow-y: auto; }
+  .rec-data-content.show { display: block; }
+  .rec-data-content pre { font-family: 'JetBrains Mono', monospace; font-size: 10px; white-space: pre-wrap; color: var(--text); }
+
+  .rec-stats-row { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 12px; }
+  .rec-stat { background: var(--bg); padding: 6px 10px; border-radius: 6px; text-align: center; min-width: 70px; }
+  .rec-stat .val { font-size: 14px; font-weight: 700; color: var(--accent); }
+  .rec-stat .lbl { font-size: 9px; color: var(--text2); margin-top: 2px; }
+
+  /* Full width recorder card */
+  .rec-full { grid-column: 1 / -1; }
 </style>
 </head>
 <body>
@@ -284,43 +324,29 @@ function renderPattern(i) {
       </div>
     </div>
 
-    <!-- Result + Recorder -->
-    <div class="split">
-      <div class="card">
-        <div class="card-header">
-          <h2>\u2705 Execution Result</h2>
-        </div>
-        <div class="card-body">
-          <div class="result-box">${escHtml(p.result || '(no result)')}</div>
-        </div>
+    <!-- Result -->
+    <div class="card">
+      <div class="card-header">
+        <h2>\u2705 Execution Result</h2>
       </div>
-
-      ${p.recorderStats ? `
-      <div class="card">
-        <div class="card-header">
-          <h2>\uD83D\uDCCA LLMRecorder Stats</h2>
-          <span class="badge badge-recorder">Layer 2</span>
-        </div>
-        <div class="card-body">
-          <div class="stats-grid">
-            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalCalls}</div><div class="stat-label">LLM Calls</div></div>
-            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalTokens}</div><div class="stat-label">Total Tokens</div></div>
-            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalInputTokens}</div><div class="stat-label">Input Tokens</div></div>
-            <div class="stat-card"><div class="stat-value">${p.recorderStats.totalOutputTokens}</div><div class="stat-label">Output Tokens</div></div>
-            <div class="stat-card"><div class="stat-value">${Math.round(p.recorderStats.averageLatencyMs || 0)}ms</div><div class="stat-label">Avg Latency</div></div>
-            <div class="stat-card"><div class="stat-value">${p.recorderStats.streamingCalls}/${p.recorderStats.nonStreamingCalls}</div><div class="stat-label">Stream/Non</div></div>
-          </div>
-        </div>
-      </div>` : `
-      <div class="card">
-        <div class="card-header">
-          <h2>\uD83D\uDD0D Stage Detail</h2>
-        </div>
-        <div class="card-body" id="stage-detail">
-          <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px;">Click a stage in the flowchart or description to see details</div>
-        </div>
-      </div>`}
+      <div class="card-body">
+        <div class="result-box">${escHtml(p.result || '(no result)')}</div>
+      </div>
     </div>
+
+    <!-- Stage Detail (for patterns without recorders) -->
+    ${!p.recorders ? `
+    <div class="card">
+      <div class="card-header">
+        <h2>\uD83D\uDD0D Stage Detail</h2>
+      </div>
+      <div class="card-body" id="stage-detail">
+        <div style="color:var(--text2);font-size:13px;text-align:center;padding:20px;">Click a stage in the flowchart or description to see details</div>
+      </div>
+    </div>` : ''}
+
+    <!-- Recorder Observatory -->
+    ${p.recorders ? renderRecorderObservatory(p) : ''}
   `;
 
   renderFlowchart(p);
@@ -518,6 +544,128 @@ function escHtml(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
   return div.innerHTML;
+}
+
+// ── Recorder Observatory renderer ──
+const REC_ICONS = {
+  book: '\uD83D\uDCD6', cpu: '\uD83E\uDDE0', dollar: '\uD83D\uDCB0', gauge: '\u26A1', bug: '\uD83D\uDD0D',
+};
+const REC_COLORS = {
+  book: 'var(--green)', cpu: 'var(--cyan)', dollar: 'var(--yellow)', gauge: 'var(--orange)', bug: 'var(--pink)',
+};
+
+function renderRecorderObservatory(p) {
+  const recs = p.recorders;
+  if (!recs) return '';
+
+  const order = ['narrative', 'llm', 'cost', 'metric', 'debug'];
+  const cards = order.filter(k => recs[k]).map(key => {
+    const r = recs[key];
+    const icon = REC_ICONS[r.icon] || '\uD83D\uDCCA';
+    const color = REC_COLORS[r.icon] || 'var(--accent)';
+    const layerClass = r.layer === 0 ? 'rec-layer-0' : 'rec-layer-1';
+    const layerLabel = r.layer === 0 ? 'FootPrint' : 'AgentFootPrints';
+
+    let statsHtml = '';
+    let dataHtml = '';
+
+    if (key === 'llm' && r.data) {
+      const d = r.data;
+      statsHtml = `<div class="rec-stats-row">
+        <div class="rec-stat"><div class="val">${d.totalCalls || 0}</div><div class="lbl">Calls</div></div>
+        <div class="rec-stat"><div class="val">${d.totalInputTokens || 0}</div><div class="lbl">In Tokens</div></div>
+        <div class="rec-stat"><div class="val">${d.totalOutputTokens || 0}</div><div class="lbl">Out Tokens</div></div>
+        <div class="rec-stat"><div class="val">${d.totalTokens || 0}</div><div class="lbl">Total</div></div>
+        <div class="rec-stat"><div class="val">${Math.round(d.averageLatencyMs || 0)}ms</div><div class="lbl">Avg Latency</div></div>
+        <div class="rec-stat"><div class="val">${d.streamingCalls || 0}/${d.nonStreamingCalls || 0}</div><div class="lbl">Stream/Non</div></div>
+      </div>`;
+      if (r.entries && r.entries.length) {
+        dataHtml = renderDataToggle(key, 'Call Entries', JSON.stringify(r.entries, null, 2));
+      }
+    } else if (key === 'cost') {
+      statsHtml = `<div class="rec-stats-row">
+        <div class="rec-stat"><div class="val" style="color:var(--yellow)">$${(r.totalCost || 0).toFixed(6)}</div><div class="lbl">Total Cost</div></div>
+        <div class="rec-stat"><div class="val">$${((r.data?.totalInputCost) || 0).toFixed(6)}</div><div class="lbl">Input Cost</div></div>
+        <div class="rec-stat"><div class="val">$${((r.data?.totalOutputCost) || 0).toFixed(6)}</div><div class="lbl">Output Cost</div></div>
+        <div class="rec-stat"><div class="val">${r.data?.totalCalls || 0}</div><div class="lbl">Calls</div></div>
+      </div>`;
+      if (r.summary) {
+        dataHtml = renderDataToggle(key, 'Cost Summary', r.summary);
+      }
+    } else if (key === 'metric' && r.data) {
+      const d = r.data;
+      statsHtml = `<div class="rec-stats-row">
+        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalReads || 0}</div><div class="lbl">Reads</div></div>
+        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalWrites || 0}</div><div class="lbl">Writes</div></div>
+        <div class="rec-stat"><div class="val" style="color:var(--orange)">${d.totalCommits || 0}</div><div class="lbl">Commits</div></div>
+      </div>`;
+      if (d.stages && Object.keys(d.stages).length) {
+        dataHtml = renderDataToggle(key, 'Per-Stage Metrics', JSON.stringify(d.stages, null, 2));
+      }
+    } else if (key === 'debug' && r.data) {
+      const d = r.data;
+      statsHtml = '<div class="rec-stats-row">' +
+        '<div class="rec-stat"><div class="val" style="color:var(--pink)">' + (d.totalEntries || 0) + '</div><div class="lbl">Entries</div></div>' +
+        '<div class="rec-stat"><div class="val" style="color:' + (d.errors && d.errors.length ? 'var(--red)' : 'var(--green)') + '">' + (d.errors ? d.errors.length : 0) + '</div><div class="lbl">Errors</div></div>' +
+      '</div>';
+      if (d.entries && d.entries.length) {
+        var debugLines = d.entries.map(function(e) {
+          return '[' + e.type + '] ' + e.stageName + ' | ' + (e.path ? e.path + '.' : '') + (e.key || '') + (e.value !== undefined ? ' = ' + JSON.stringify(e.value).slice(0, 80) : '');
+        }).join('\n');
+        dataHtml = renderDataToggle(key, 'Debug Entries (' + d.totalEntries + ')', debugLines);
+      }
+    } else if (key === 'narrative' && r.data) {
+      var lines = Array.isArray(r.data) ? r.data : [];
+      statsHtml = '<div class="rec-stats-row">' +
+        '<div class="rec-stat"><div class="val" style="color:var(--green)">' + lines.length + '</div><div class="lbl">Sentences</div></div>' +
+      '</div>';
+      if (lines.length) {
+        dataHtml = renderDataToggle(key, 'Full Narrative', lines.join('\n'));
+      }
+    }
+
+    return '<div class="rec-card' + (key === 'debug' ? ' rec-full' : '') + '">' +
+      '<div class="rec-card-head">' +
+        '<div class="rec-icon" style="background:' + color + '22;color:' + color + '">' + icon + '</div>' +
+        '<div class="rec-title">' +
+          '<h3>' + r.label + '</h3>' +
+          '<div class="rec-category">' + r.category + '</div>' +
+        '</div>' +
+        '<span class="rec-layer ' + layerClass + '">Layer ' + r.layer + ' \u00B7 ' + layerLabel + '</span>' +
+      '</div>' +
+      '<div class="rec-card-body">' +
+        '<div class="rec-desc">' + r.description + '</div>' +
+        '<div class="rec-analogy">\u2248 ' + r.analogy + '</div>' +
+        '<div class="rec-data">' + statsHtml + dataHtml + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  return '<div class="observatory">' +
+    '<div class="observatory-header">' +
+      '<h2>\uD83D\uDD2D Recorder Observatory</h2>' +
+      '<span class="obs-sub">Built-in observability \u2014 no external APM needed</span>' +
+      '<span class="obs-badge">5 RECORDERS</span>' +
+    '</div>' +
+    '<div class="rec-grid">' + cards.join('') + '</div>' +
+  '</div>';
+}
+
+function renderDataToggle(key, label, content) {
+  var id = 'rec-data-' + key;
+  return '<div class="rec-data-toggle" onclick="toggleRecData(\'' + id + '\')">' +
+      '<span class="chevron" id="chev-' + id + '">\u25B6</span> ' + label +
+    '</div>' +
+    '<div class="rec-data-content" id="' + id + '">' +
+      '<pre>' + escHtml(content) + '</pre>' +
+    '</div>';
+}
+
+function toggleRecData(id) {
+  const el = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  el.classList.toggle('show');
+  chev.classList.toggle('open');
 }
 
 init();

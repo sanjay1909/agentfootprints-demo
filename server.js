@@ -9,7 +9,10 @@ const { AgentBuilder } = require(`${AFPROOT}/dist/builder/AgentBuilder`);
 const { AgentExecutor } = require(`${AFPROOT}/dist/executor/AgentExecutor`);
 const { ToolRegistry } = require(`${AFPROOT}/dist/tools/ToolRegistry`);
 const { LLMRecorder } = require(`${AFPROOT}/dist/recorders/LLMRecorder`);
+const { CostRecorder } = require(`${AFPROOT}/dist/recorders/CostRecorder`);
 const { NarrativeRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/NarrativeRecorder`);
+const { MetricRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/MetricRecorder`);
+const { DebugRecorder } = require(`${AFPROOT}/node_modules/footprint/dist/scope/recorders/DebugRecorder`);
 const { MockAdapter } = require(`${AFPROOT}/dist/adapters/mock/MockAdapter`);
 const { MockAnthropicAdapter } = require(`${AFPROOT}/dist/adapters/examples/MockAnthropicAdapter`);
 const { MockOpenAIAdapter } = require(`${AFPROOT}/dist/adapters/examples/MockOpenAIAdapter`);
@@ -296,19 +299,31 @@ app.get('/api/patterns', async (req, res) => {
         inputSchema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
         handler: async (input) => JSON.stringify({ temp: '72°F', condition: 'Sunny', city: input.city }),
       });
+      // All 5 recorders attached
       const llmRec = new LLMRecorder('react-demo');
+      const costRec = new CostRecorder({ id: 'react-demo' });
       const narRec = new NarrativeRecorder({ id: 'react-demo', detail: 'full' });
+      const metricRec = new MetricRecorder({ id: 'react-demo' });
+      const debugRec = new DebugRecorder({ id: 'react-demo', verbosity: 'verbose' });
 
       const build = AgentBuilder.agent('react-agent', { adapter: flowChart, toolRegistry: reg })
         .systemPrompt('You are a weather assistant. Use the get_weather tool to answer questions.')
         .useTool('get_weather')
         .withRecorder(llmRec)
+        .withRecorder(costRec)
         .withRecorder(narRec)
+        .withRecorder(metricRec)
+        .withRecorder(debugRec)
         .maxLoopIterations(5)
         .build();
 
       const executor = new AgentExecutor(build);
       const result = await executor.run('What is the weather in Seattle?');
+
+      // Collect all recorder outputs
+      const metrics = metricRec.getMetrics();
+      const debugEntries = debugRec.getEntries();
+      const costAggregate = costRec.getAggregateCosts();
 
       results.push({
         name: 'ReactAgent',
@@ -334,6 +349,83 @@ app.get('/api/patterns', async (req, res) => {
         },
         narrative: narRec.toFlatSentences(),
         result: result.response || '(no result)',
+        // ── All 5 Recorder outputs ──
+        recorders: {
+          narrative: {
+            label: 'NarrativeRecorder',
+            category: 'Audit & Storytelling',
+            icon: 'book',
+            layer: 0,
+            description: 'Human-readable timeline of what happened — every scope read/write as a sentence. Like an audit trail that tells the story of execution.',
+            analogy: 'CloudTrail / Audit Logs',
+            data: narRec.toFlatSentences(),
+            stageData: Object.fromEntries(narRec.toSentences()),
+          },
+          llm: {
+            label: 'LLMRecorder',
+            category: 'Token & Latency',
+            icon: 'cpu',
+            layer: 1,
+            description: 'Tracks every LLM call: model name, input/output tokens, latency, streaming mode. The core telemetry for LLM observability.',
+            analogy: 'Datadog APM / Request Traces',
+            data: llmRec.getAggregateStats(),
+            entries: llmRec.getEntries(),
+          },
+          cost: {
+            label: 'CostRecorder',
+            category: 'Cost & Budget',
+            icon: 'dollar',
+            layer: 1,
+            description: 'Calculates $ cost per LLM call using a pricing table. Supports budget limits with alert callbacks. Built-in pricing for GPT-4, Claude, o1, etc.',
+            analogy: 'AWS Cost Explorer / CloudWatch Billing Alarms',
+            data: costAggregate,
+            totalCost: costRec.getTotalCost(),
+            summary: costRec.toSummary(),
+          },
+          metric: {
+            label: 'MetricRecorder',
+            category: 'Performance',
+            icon: 'gauge',
+            layer: 0,
+            description: 'Production metrics: read/write/commit counts per stage, execution duration, invocation counts. Lightweight enough for always-on production use.',
+            analogy: 'Prometheus / Datadog Metrics',
+            data: {
+              totalReads: metrics.totalReads,
+              totalWrites: metrics.totalWrites,
+              totalCommits: metrics.totalCommits,
+              stages: Object.fromEntries(
+                Array.from(metrics.stages || new Map()).map(([name, m]) => [name, {
+                  readCount: m.readCount,
+                  writeCount: m.writeCount,
+                  commitCount: m.commitCount,
+                  totalDuration: m.totalDuration,
+                  invocationCount: m.invocationCount,
+                }])
+              ),
+            },
+          },
+          debug: {
+            label: 'DebugRecorder',
+            category: 'Debug & Inspection',
+            icon: 'bug',
+            layer: 0,
+            description: 'Captures all mutations (writes), errors, and optionally reads with full values. Verbose mode gives complete internal state at every step.',
+            analogy: 'Chrome DevTools / Debug Logs',
+            data: {
+              totalEntries: debugEntries.length,
+              errors: debugRec.getErrors().map(e => ({ stageName: e.stageName, type: e.type, timestamp: e.timestamp, data: e.data })),
+              entries: debugEntries.slice(0, 50).map(e => ({
+                type: e.type,
+                stageName: e.stageName,
+                timestamp: e.timestamp,
+                path: e.data?.path,
+                key: e.data?.key,
+                value: typeof e.data?.value === 'string' ? e.data.value.slice(0, 100) : e.data?.value,
+              })),
+            },
+          },
+        },
+        // Keep legacy field for backward compat
         recorderStats: llmRec.getAggregateStats(),
       });
     }
